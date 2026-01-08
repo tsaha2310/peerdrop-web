@@ -1,0 +1,25 @@
+{
+  "name": "PeerDrop Web",
+  "short_name": "PeerDrop",
+  "description": "Secure Peer-to-peer file sharing and chat in your browser",
+  "start_url": "/peerdrop-web/",
+  "scope": "/peerdrop-web/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#3b82f6",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/peerdrop-web/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/peerdrop-web/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["utilities", "productivity"]
+}

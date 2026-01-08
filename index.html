@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <base href="https://tsaha2310.github.io/peerdrop-web/">
+    <link rel="manifest" href="/peerdrop-web/manifest.json">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PeerDrop Web</title>
+    <meta name="theme-color" content="#0f172a">
+    <meta name="description" content="Secure Peer-to-peer file sharing and chat in your browser">
+    
+    <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBlZXJEcm9wIFdlYiIsCiAgInNob3J0X25hbWUiOiAiUGVlckRyb3AiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBmMTcyYSIsCiAgInRoZW1lX2NvbG9yIjogIiMzYjgyZjYiLAogICJpY29ucyI6IFwW1ld2hpbGUyNSB7IGZpbGw6ICMzYjgyZjY7IH0gPC9zdHlsZT4gPHBhdGggY2xhc3M9ImZpbGUyNSIgZD0iTTEwMCwyMCBDNjAsODAgMjAsMTIwIDIwLDE1NSBDMjAsMTk1IDU1LDIyNSAxMDAsMjI1IEMxNDUsMjI1IDE4MCwxOTUgMTgwLDE1NSBDMTgwLDEyMCAxNDAsODAgMTAwLDIwIFoiIC8+IDwvc3ZnPiIgdHlwZT0iaW1hZ2Uvc3ZnK3htbCIKICAgIH0KICBdLAogICJzaGFyZV90YXJnZXQiOiB7CiAgICAiYWN0aW9uIjogIi4iLAogICAgIm1ldGhvZCI6ICJHRVQiLAogICAgInBhcmFtcyI6IHsKICAgICAgInRpdGxlIjogInRpdGxlIiwKICAgICAgInRleHQiOiAidGV4dCIsCiAgICAgICJ1cmwiOiAidXJsIgogICAgfQogIH0KfQ==">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        :root { --bg: #0f172a; --panel: #1e293b; --border: #334155; --primary: #3b82f6; --danger: #ef4444; --success: #10b981; --warn: #f59e0b; --text: #f8fafc; --me-bg: #2563eb; --peer-bg: #334155; }
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg); color: var(--text); 
+            margin: 0; padding: 0; 
+            height: 100dvh; 
+            display: flex; flex-direction: column; overflow: hidden; 
+        }
+
+        .hidden { display: none !important; }
+        .btn { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; width: 100%; font-size: 1rem; transition: background 0.2s; }
+        .btn:active { opacity: 0.8; }
+        .btn-sec { background: #475569; }
+        .btn-sm { width: auto; padding: 8px 16px; font-size: 0.85rem; border-radius: 6px; }
+        .btn-danger { background: var(--danger); }
+        .btn-success { background: var(--success); }
+
+        /* HEADER */
+        #app-header { height: 55px; background: var(--panel); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 15px; flex-shrink: 0; z-index: 50; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .header-left { display: flex; align-items: center; gap: 15px; }
+        .status-badge { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; letter-spacing: 0.5px; background: rgba(0,0,0,0.2); padding: 4px 10px; border-radius: 20px; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; background: #64748b; }
+        .dot.connected { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .dot.reconnecting { background: var(--warn); }
+        .dot.disconnected { background: var(--danger); }
+        #menu-btn { background: none; border: none; color: white; font-size: 1.6rem; cursor: pointer; padding: 0; line-height: 1; }
+
+        /* MENU */
+        #main-menu { position: absolute; top: 56px; left: 10px; width: 260px; background: #1e293b; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 100; transform: scale(0.95); opacity: 0; pointer-events: none; transition: 0.2s cubic-bezier(0.16, 1, 0.3, 1); transform-origin: top left; }
+        #main-menu.visible { transform: scale(1); opacity: 1; pointer-events: auto; }
+        .menu-item { display: block; width: 100%; padding: 14px 20px; text-align: left; background: none; border: none; color: #cbd5e1; cursor: pointer; font-size: 0.95rem; border-bottom: 1px solid #334155; }
+        .menu-item:last-child { border-bottom: none; }
+        .menu-item:hover { background: #334155; color: white; }
+        .menu-section { font-size: 0.75rem; color: #94a3b8; padding: 12px 20px 4px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; }
+        body.beginner-mode .advanced-only { display: none !important; }
+
+        /* SCREENS */
+        .screen { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        #setup-panel { padding: 20px; overflow-y: auto; align-items: center; justify-content: center; }
+        .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 25px; text-align: center; width: 100%; max-width: 420px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; font-size: 1.5rem; color: white; border-bottom: 1px solid #334155; padding-bottom: 15px; margin-bottom: 20px; }
+        
+        /* Role Selection */
+        .role-card-container { display:flex; gap:10px; flex-direction: column; }
+        .role-btn { text-align: left; position: relative; padding: 20px; border: 2px solid var(--border); background: rgba(0,0,0,0.2); transition: 0.2s; }
+        .role-btn:hover { border-color: var(--primary); background: rgba(59, 130, 246, 0.1); }
+        .role-title { display: block; font-size: 1.1rem; font-weight: bold; margin-bottom: 4px; color: white; }
+        .role-desc { display: block; font-size: 0.85rem; color: #94a3b8; font-weight: normal; }
+
+        /* MANUAL MODE */
+        .manual-box { background: #0f172a; border: 1px dashed #475569; padding: 15px; margin-top: 15px; border-radius: 8px; text-align: left; }
+        .sdp-text { width: 100%; height: 80px; background: #020617; color: #a5b4fc; border: 1px solid #334155; font-family: monospace; font-size: 0.75rem; padding: 8px; border-radius: 4px; margin-bottom: 8px; resize: none; }
+        .manual-label { font-size: 0.85rem; color: #94a3b8; margin-bottom: 5px; display: block; font-weight: bold; }
+        .manual-link { color:#64748b; font-size:0.8rem; margin-top:10px; display:block; text-decoration: underline; cursor: pointer;}
+
+        /* CHAT ROOM */
+        #room-panel { display: flex; flex-direction: column; height: 100%; background: #0b1120; }
+        #chat-history { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
+        
+        /* FILE SEND MODE */
+        body.files-only #chat-history { display: none; }
+        body.files-only #room-panel { justify-content: center; align-items: center; padding: 20px; }
+        body.files-only #input-area { background: transparent; border: none; flex-direction: column; width: 100%; max-width: 400px; height: 100%; justify-content: center; }
+        body.files-only #input-area input[type=text] { display: none; }
+        body.files-only #send-txt-btn { display: none; }
+        body.files-only #big-upload-btn { display: flex !important; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 200px; border: 2px dashed var(--primary); border-radius: 20px; background: rgba(59, 130, 246, 0.1); color: var(--primary); font-size: 1.2rem; cursor: pointer; }
+        
+        /* Messages */
+        .msg-row { display: flex; flex-direction: column; max-width: 85%; }
+        .msg-row.me { align-self: flex-end; align-items: flex-end; }
+        .msg-row.peer { align-self: flex-start; align-items: flex-start; }
+        
+        .msg-bubble { padding: 10px 14px; border-radius: 12px; font-size: 0.95rem; line-height: 1.4; word-wrap: break-word; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .me .msg-bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 2px; }
+        .peer .msg-bubble { background: var(--peer-bg); color: #e2e8f0; border-bottom-left-radius: 2px; }
+        .sys-msg { align-self: center; background: rgba(255,255,255,0.1); color: #94a3b8; font-size: 0.75rem; padding: 4px 12px; border-radius: 20px; margin: 8px 0; }
+        .msg-time { font-size: 0.65rem; margin-top: 4px; opacity: 0.7; }
+        
+        /* MEDIA PREVIEWS */
+        .img-preview { max-width: 200px; max-height: 200px; border-radius: 8px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2); display: block; }
+        video.media-preview, audio.media-preview { width: 100%; max-width: 280px; margin-top: 8px; border-radius: 8px; }
+        
+        /* Progress Bar */
+        .file-progress-container { margin-top:8px; background: rgba(0,0,0,0.3); height: 6px; border-radius: 3px; overflow: hidden; width: 100%; min-width: 150px; }
+        .file-progress-bar { height: 100%; background: var(--success); width: 0%; transition: width 0.1s linear, background 0.3s; }
+        .file-progress-bar.paused { background: var(--warn); }
+        .file-progress-bar.cancelled { background: var(--danger); }
+        .file-stat-text { font-size: 0.75rem; margin-top: 4px; display: flex; justify-content: space-between; opacity: 0.8; }
+        
+        /* File Controls (Material) */
+        .file-controls { display: flex; gap: 10px; margin-top: 10px; justify-content: flex-end; align-items: center; }
+        .ctrl-btn { 
+            width: 32px; height: 32px; border-radius: 50%; border: none; 
+            display: flex; align-items: center; justify-content: center; 
+            cursor: pointer; transition: 0.2s; 
+            background: rgba(255,255,255,0.15); color: white;
+            font-size: 1rem;
+        }
+        .ctrl-btn:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
+        .ctrl-btn.btn-cancel { color: #fca5a5; }
+        .ctrl-btn.btn-cancel:hover { background: rgba(239,68,68,0.3); color: white; }
+
+        /* Input Area */
+        #input-area { flex-shrink: 0; padding: 12px; background: var(--panel); border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; padding-bottom: max(12px, env(safe-area-inset-bottom)); position: relative; }
+        input[type="text"] { flex: 1; padding: 12px 16px; border-radius: 24px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 16px; }
+        input[type="text"]:focus { border-color: var(--primary); }
+
+        /* DEBUG CONSOLE */
+        #debug-panel { position: absolute; top: 55px; left: 0; right: 0; height: 60vh; background: rgba(10, 10, 15, 0.98); z-index: 200; display: none; flex-direction: column; border-bottom: 2px solid var(--primary); font-family: 'Courier New', monospace; font-size: 11px; color: #4ade80; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        #debug-panel.visible { display: flex; }
+        #debug-header { padding: 8px 12px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        #debug-content { flex: 1; overflow-y: scroll; padding: 12px; }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #334155; padding-bottom: 2px; word-break: break-all; }
+        .log-v { color: #94a3b8; }
+        .log-warn { color: var(--warn); }
+        .log-err { color: var(--danger); font-weight: bold; background: rgba(239, 68, 68, 0.1); padding: 2px; border-radius: 4px; }
+        .log-success { color: var(--success); font-weight: bold; border-left: 3px solid var(--success); padding-left: 6px; }
+
+        /* UTILS */
+        #video { width: 100%; border-radius: 12px; border: 2px solid var(--success); display: none; margin-top: 15px; background: black; }
+        #hidden-video { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+        
+        /* MODALS */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 300; display: none; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+        .modal-overlay.visible { display: flex; }
+        .modal-card { background: var(--panel); width: 90%; max-width: 400px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; max-height: 85vh; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        
+        /* ONBOARDING */
+        #onboarding-overlay { background: var(--bg); z-index: 9000; overflow-y: auto; display: none; 
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+        }
+        #onboarding-overlay.visible { display: flex; align-items: center; justify-content: center; }
+        .ob-container { max-width: 800px; padding: 40px; text-align: center; }
+        .ob-logo { width: 120px; height: 120px; margin-bottom: 20px; }
+        .ob-title-main { font-size: 2.5rem; font-weight: 800; margin-bottom: 10px; background: linear-gradient(to right, #fff, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .ob-subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto; }
+        .ob-cards { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px; }
+        .ob-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 25px; border-radius: 16px; flex: 1 1 220px; max-width: 280px; text-align: center; transition: transform 0.2s; }
+        .ob-card:hover { transform: translateY(-5px); border-color: var(--primary); }
+        .ob-icon { font-size: 2.5rem; margin-bottom: 15px; }
+        .ob-card-title { font-weight: 700; margin-bottom: 8px; color: white; }
+        .ob-card-desc { font-size: 0.9rem; color: #cbd5e1; line-height: 1.5; }
+        .btn-ob { background: linear-gradient(135deg, var(--primary), #2563eb); padding: 16px 32px; font-size: 1.1rem; border-radius: 30px; box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.5); transition: transform 0.2s, box-shadow 0.2s; }
+        .btn-ob:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -10px rgba(59, 130, 246, 0.6); }
+        
+        /* DROP ZONE */
+        #drop-zone { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(59, 130, 246, 0.8); z-index: 10000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        #drop-zone.active { display: flex; }
+        .drop-content { text-align: center; color: white; pointer-events: none; transform: scale(1.1); transition: transform 0.2s; }
+        
+        /* CALL OVERLAY */
+        #call-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 2000; display: none; flex-direction: column; }
+        #call-overlay.visible { display: flex; }
+        #remote-video { flex: 1; width: 100%; height: 100%; object-fit: cover; }
+        #local-video { position: absolute; bottom: 100px; right: 20px; width: 100px; height: 150px; background: #333; border: 2px solid white; border-radius: 8px; object-fit: cover; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
+        #call-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 20px; padding-bottom: env(safe-area-inset-bottom); }
+        .call-btn { width: 60px; height: 60px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .btn-hangup { background: #ef4444; color: white; }
+        .btn-mute { background: #334155; color: white; }
+        
+        /* IP List */
+        .ip-row { display: flex; align-items: center; gap: 12px; padding: 12px; background: #0f172a; border-radius: 8px; margin-bottom: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.2s; }
+        .ip-row:hover { border-color: var(--primary); background: #1e293b; }
+        .ip-row input { transform: scale(1.3); }
+        
+        /* LOADING */
+        #loading-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.95); z-index: 500; display: none; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px); transition: opacity 0.3s; }
+        #loading-overlay.visible { display: flex; }
+        .spinner { width: 50px; height: 50px; border: 4px solid rgba(59, 130, 246, 0.3); border-radius: 50%; border-top-color: var(--primary); animation: spin 1s ease-in-out infinite; margin-bottom: 20px; }
+        .loading-text { color: white; font-weight: 600; font-size: 1.1rem; letter-spacing: 0.5px; }
+        .loading-sub { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; text-align: center; max-width: 80%; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="beginner-mode">
+
+<div id="drop-zone">
+    <div class="drop-content">
+        <div style="font-size: 5rem; margin-bottom: 20px;">📂</div>
+        <div style="font-size: 1.5rem; font-weight: bold;">Drop files to Send</div>
+        <div style="font-size: 0.9rem; margin-top: 10px; opacity: 0.8;">(Multiple files will be queued)</div>
+    </div>
+</div>
+
+<div id="call-overlay">
+    <video id="remote-video" autoplay playsinline></video>
+    <video id="local-video" autoplay playsinline muted></video>
+    <div id="call-controls">
+        <button class="call-btn btn-mute" onclick="toggleMute()">🎤</button>
+        <button class="call-btn btn-hangup" onclick="endCall()">❌</button>
+    </div>
+</div>
+
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-msg" class="loading-text">Loading...</div>
+    <div id="loading-hint" class="loading-sub">Please allow permissions if prompted</div>
+</div>
+
+<div id="onboarding-overlay" class="modal-overlay">
+    <div class="ob-container">
+        <svg class="ob-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+            <defs>
+                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                    <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
+                </linearGradient>
+            </defs>
+            <path fill="url(#grad1)" d="M100,10 C60,70 20,110 20,145 C20,185 55,215 100,215 C145,215 180,185 180,145 C180,110 140,70 100,10 Z M100,195 C65,195 40,170 40,145 C40,120 70,85 100,40 C130,85 160,120 160,145 C160,170 135,195 100,195 Z" />
+            <circle fill="#fff" cx="100" cy="145" r="35" opacity="0.9" />
+            <path fill="url(#grad1)" d="M100,125 L120,155 L80,155 Z" transform="rotate(180 100 145)"/>
+            <circle fill="url(#grad1)" cx="100" cy="120" r="8" />
+            <circle fill="url(#grad1)" cx="125" cy="160" r="8" />
+            <circle fill="url(#grad1)" cx="75" cy="160" r="8" />
+        </svg>
+        <h1 class="ob-title-main">Welcome to PeerDrop Web</h1>
+        <p class="ob-subtitle">Your secure, private, peer-to-peer file & chat bridge. No servers, no clouds, just you and them.</p>
+        
+        <div class="ob-cards">
+            <div class="ob-card">
+                <div class="ob-icon">🚫☁️</div>
+                <div class="ob-card-title">NO INSTALL • NO CLOUD</div>
+                <div class="ob-card-desc">Direct Device-to-Device. Your data never touches a server.</div>
+            </div>
+            <div class="ob-card">
+                <div class="ob-icon">💬🔒</div>
+                <div class="ob-card-title">OFFLINE / LOCAL CHAT</div>
+                <div class="ob-card-desc">Chat securely on the same Wi-Fi or Hotspot.</div>
+            </div>
+            <div class="ob-card">
+                <div class="ob-icon">📁⚡</div>
+                <div class="ob-card-title">DIRECT FILE TRANSFER</div>
+                <div class="ob-card-desc">Send photos, videos, and docs directly. No compression.</div>
+            </div>
+        </div>
+        
+        <button class="btn btn-ob" onclick="finishOnboarding()">Got it, let's start!</button>
+    </div>
+</div>
+
+<div id="file-req-modal" class="modal-overlay">
+    <div class="modal-card" style="text-align: center;">
+        <div style="font-size: 3rem;">📁</div>
+        <h3 style="margin: 10px 0;">Incoming File</h3>
+        <div id="req-filename" style="color: var(--primary); font-weight: bold; margin-bottom: 5px; word-break: break-all;">image.png</div>
+        <div id="req-filesize" style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">2.5 MB</div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-danger" onclick="rejectFile()">Reject</button>
+            <button class="btn btn-success" onclick="acceptFile()">Accept & Download</button>
+        </div>
+    </div>
+</div>
+
+<header id="app-header">
+    <div class="header-left">
+        <button id="menu-btn" onclick="toggleMenu()">☰</button>
+        <div class="status-badge">
+            <div id="status-dot" class="dot"></div>
+            <span id="status-text">IDLE</span>
+        </div>
+    </div>
+    <div style="display:flex; gap:10px;">
+        <button id="btn-call" class="btn-sm hidden" style="background:#10b981; border-radius:50%; width:34px; height:34px; padding:0; display:flex; align-items:center; justify-content:center;" onclick="startCall(true)">📞</button>
+        <button id="btn-leave" class="btn-sm btn-danger hidden" onclick="confirmLeave()">Leave</button>
+    </div>
+</header>
+
+<div id="main-menu">
+    <div class="menu-section">Preferences</div>
+    <button class="menu-item" onclick="toggleBeginnerMode()">Beginner Mode <span id="lbl-beginner" style="float:right; color:var(--success); font-weight:bold;">ON</span></button>
+    <button class="menu-item" onclick="toggleSendFileMode()">Quick Mode: Send Files <span id="lbl-filemode" style="float:right; color:#64748b; font-size:0.8em">OFF</span></button>
+    <button class="menu-item" onclick="resetOnboarding()">Replay Tutorial</button>
+    <button id="btn-install" class="menu-item hidden" onclick="installPWA()">📲 Install App</button>
+    
+    <div class="menu-section advanced-only">Network</div>
+    <button class="menu-item advanced-only" onclick="openNetworkConfig()">IP Config <span id="net-badge" style="float:right; color:var(--warn); font-size:0.8em; background:#334155; padding:2px 6px; border-radius:4px;">AUTO</span></button>
+    <div class="menu-section advanced-only">Diagnostics</div>
+    <button class="menu-item advanced-only" onclick="toggleDebug()">View Logs</button>
+    <button class="menu-item advanced-only" onclick="dumpStats()">Dump Stats</button>
+    <button class="menu-item advanced-only" onclick="cycleLogLevel()">Log Level: <span id="lbl-loglevel" style="color:var(--success)">VERBOSE</span></button>
+    <div class="menu-section">Session</div>
+    <button class="menu-item" onclick="downloadTranscript()">Download Chat</button>
+    <button class="menu-item" onclick="location.reload()" style="color:var(--danger)">Reset App</button>
+</div>
+
+<div id="ts-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
+    <div style="background:#1e293b; width:90%; max-width:380px; border-radius:16px; border:2px solid #ef4444; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.5);">
+        <div style="background:rgba(239, 68, 68, 0.1); padding:20px; text-align:center; border-bottom:1px solid #334155;">
+            <div style="font-size:3rem; margin-bottom:10px;">⚠️</div>
+            <h2 style="color:#ef4444; margin:0; font-size:1.25rem;">Network Mismatch</h2>
+        </div>
+        <div style="padding:20px;">
+            <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.5; text-align:center; margin-bottom:20px;">One device is on <strong>WiFi (IPv4)</strong> and the other on <strong>Mobile Data (IPv6)</strong>.</p>
+            <button class="btn" onclick="closeTroubleshooter()">I Fixed It - Try Again</button>
+            <button class="btn btn-sm btn-sec" style="margin-top:12px; background:none; color:#64748b; width:100%;" onclick="ignoreAndProceed()">Ignore &amp; Proceed</button>
+        </div>
+    </div>
+</div>
+
+<div id="net-modal" class="modal-overlay">
+    <div class="modal-card">
+        <div style="padding:15px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:bold; font-size:1.1rem">Network Selection</span>
+            <button onclick="closeNetworkConfig()" style="background:none; border:none; color:#aaa; font-size:1.5rem; cursor:pointer;">&times;</button>
+        </div>
+        <div style="padding:15px; flex:1; overflow-y:auto;">
+            <p style="color:#94a3b8; font-size:0.85rem; margin-top:0;">Select the specific IPs to use. Uncheck all for Auto-Discovery.</p>
+            <div id="ip-list"></div>
+            <div style="margin-top:20px; padding-top:15px; border-top:1px solid #333;">
+                <label style="font-size:0.8rem; color:#cbd5e1; display:block; margin-bottom:8px;">Add Custom IP (Advanced):</label>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="custom-ip" placeholder="192.168.x.x" style="padding:10px; background:#0f172a; border:1px solid #334155; color:white; border-radius:6px; flex:1;">
+                    <button class="btn-sm btn-sec" onclick="addCustomIP()">Add</button>
+                </div>
+            </div>
+        </div>
+        <div style="padding:15px; border-top:1px solid #333;">
+            <button class="btn" onclick="saveNetworkConfig()">Apply Settings</button>
+        </div>
+    </div>
+</div>
+
+<div id="debug-panel">
+    <div id="debug-header">
+        <strong>SYSTEM LOGS</strong>
+        <div style="display:flex; gap:8px;">
+            <button class="btn-sm btn-sec" onclick="copyLogs()">COPY</button>
+            <button class="btn-sm btn-danger" onclick="toggleDebug()">CLOSE</button>
+        </div>
+    </div>
+    <div id="debug-content"></div>
+</div>
+
+<div id="setup-panel" class="screen">
+    <div class="card">
+        <h2>PeerDrop Web</h2>
+        <div id="role-select" class="role-card-container">
+            <button class="btn role-btn" onclick="initHost()">
+                <span class="role-title">📡 Start Room (HOST)</span>
+                <span class="role-desc">Creates a room. Shows a QR code for others to join.</span>
+            </button>
+            <button class="btn role-btn" onclick="initReceiver()">
+                <span class="role-title">📸 Join Room (GUEST)</span>
+                <span class="role-desc">Uses camera to scan the Host's QR code.</span>
+            </button>
+        </div>
+        
+        <div id="step-qr" class="hidden">
+            <div id="qr-container" style="background:white; padding:15px; display:inline-block; border-radius:12px; margin:15px 0;">
+                <div id="qrcode"></div>
+            </div>
+            
+            <p id="qr-hint" style="color:#cbd5e1; font-size:0.9rem; margin:10px 0;"></p>
+            
+            <div id="manual-display-area" class="manual-box hidden">
+                <label id="manual-display-label" class="manual-label">1. Copy this code:</label>
+                <textarea id="manual-share-text" class="sdp-text" readonly onclick="this.select()"></textarea>
+                <button class="btn-sm" onclick="navigator.clipboard.writeText(getEl('manual-share-text').value);alert('Copied!')">Copy to Clipboard</button>
+                
+                <div id="host-manual-answer" class="hidden">
+                    <label class="manual-label" style="margin-top:10px;">2. Paste Guest Answer here:</label>
+                    <textarea id="host-sdp-in" class="sdp-text" placeholder="Paste Answer code here..."></textarea>
+                    <button class="btn-sm btn-success" onclick="handleManualAnswer()">Connect</button>
+                </div>
+            </div>
+
+            <button id="btn-scan-answer" class="hidden btn btn-sm btn-success" style="margin-top:10px; padding:12px 20px; font-size:1rem;" onclick="startScanner()">Scan Answer QR</button>
+            <p><a href="#" onclick="toggleManualMode('display')" style="color:#64748b; font-size:0.8rem;">Camera not working? Use Manual Mode</a></p>
+            <button class="btn btn-sm btn-sec" style="margin-top:15px" onclick="location.reload()">Cancel</button>
+        </div>
+
+        <div id="step-scan" class="hidden">
+            <video id="video" playsinline></video>
+            <p id="scan-instr" style="color:#94a3b8; font-size:0.9rem; margin-top:15px;">Frame the QR Code</p>
+            
+            <div id="guest-manual-area" class="manual-box hidden">
+                <label class="manual-label">STEP 1: Paste Host Code here</label>
+                <textarea id="guest-sdp-in" class="sdp-text" placeholder="Paste Host Offer code..."></textarea>
+                <button class="btn-sm btn-success" onclick="handleManualOffer()">Generate Answer</button>
+            </div>
+
+            <p id="guest-manual-link"><a href="#" onclick="toggleManualMode('guest')" class="manual-link">Camera not working? Use Manual Mode</a></p>
+            <button class="btn btn-sm btn-sec" onclick="location.reload()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="room-panel" class="screen hidden">
+    <div id="chat-history">
+        <div style="text-align:center; margin-top:50px; opacity:0.3;">
+            <div style="font-size:3rem">🔒</div>
+            <p>End-to-End Encrypted</p>
+        </div>
+    </div>
+    <div id="input-area">
+        <div id="attach-hint" class="tooltip-hint hidden">Tap to send files</div>
+        <input type="file" id="file-input" class="hidden" multiple>
+        <div id="big-upload-btn" class="hidden" onclick="document.getElementById('file-input').click()">
+            <div style="font-size:3rem; margin-bottom:10px;">📄</div>
+            <span>Tap to Send File</span>
+        </div>
+        <button id="btn-attach" class="btn-sm btn-sec" style="padding:10px 14px; font-size:1.2rem;" onclick="document.getElementById('file-input').click()">📎</button>
+        <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
+        <button id="send-txt-btn" class="btn-sm" style="padding:10px 16px; border-radius:20px;" onclick="sendText()">➤</button>
+    </div>
+</div>
+
+<video id="hidden-video" playsinline autoplay muted></video>
+
+<script>
+    // --- STATE ---
+    let pc, dc, stream, keepAliveStream;
+    let isHost = false, fileMeta = null, fileBuffer = [], receivedSize = 0;
+    let logLevel = 'VERBOSE'; 
+    let manualIPs = [], strictModeTargetIPs = [];
+    const CHUNK_SIZE = 16384; 
+    let fileQueue = [];
+    let pendingFileReq = null;
+    let callStream = null;
+    let wakeLock = null;
+    let deferredPrompt = null;
+
+    // TRANSFER STATE
+    let activeTransfer = null; 
+    let transferState = 'idle'; // idle, active, paused, cancelled
+
+    // --- UI HELPERS ---
+    const getEl = (id) => document.getElementById(id);
+    const toggleMenu = () => getEl('main-menu').classList.toggle('visible');
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/peerdrop-web/sw.js', {
+            scope: '/peerdrop-web/'
+        });
+    }
+    
+    function initApp() {
+        if (!localStorage.getItem('skipIntro')) getEl('onboarding-overlay').classList.add('visible');
+        const beginner = localStorage.getItem('beginnerMode') !== 'false';
+        if(beginner) document.body.classList.add('beginner-mode');
+        else {
+            document.body.classList.remove('beginner-mode');
+            getEl('lbl-beginner').innerText = 'OFF';
+            getEl('lbl-beginner').style.color = '#64748b';
+        }
+        
+        // Share Target Handler
+        const params = new URLSearchParams(window.location.search);
+        if(params.has('text')) {
+            getEl('msg-input').value = params.get('text');
+            finishOnboarding(); // Skip intro if sharing
+        }
+
+        // Install Prompt Listener
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            getEl('btn-install').classList.remove('hidden');
+            log("App Install Available", 'INFO');
+        });
+
+        document.body.addEventListener('dragover', (e) => { e.preventDefault(); getEl('drop-zone').classList.add('active'); });
+        document.body.addEventListener('dragleave', (e) => { if(e.relatedTarget === null) getEl('drop-zone').classList.remove('active'); });
+        document.body.addEventListener('drop', (e) => {
+            e.preventDefault();
+            getEl('drop-zone').classList.remove('active');
+            if(e.dataTransfer.files.length && dc && dc.readyState === 'open') handleFiles(e.dataTransfer.files);
+            else if (e.dataTransfer.files.length) alert("Connect to a peer first!");
+        });
+    }
+    
+    async function installPWA() {
+        if(deferredPrompt) {
+            deferredPrompt.prompt();
+            const choice = await deferredPrompt.userChoice;
+            if(choice.outcome === 'accepted') getEl('btn-install').classList.add('hidden');
+            deferredPrompt = null;
+        }
+    }
+
+    function vibe(pattern) { if(navigator.vibrate) navigator.vibrate(pattern); }
+
+    // --- MANUAL MODE TOGGLING ---
+    function toggleManualMode(mode) {
+        if(mode === 'display') {
+            getEl('manual-display-area').classList.toggle('hidden');
+            getEl('qr-container').classList.toggle('hidden');
+        } else {
+            getEl('guest-manual-area').classList.toggle('hidden');
+            getEl('video').classList.toggle('hidden');
+            if(stream) stream.getTracks().forEach(t=>t.stop());
+        }
+    }
+
+    async function handleManualOffer() {
+        const text = getEl('guest-sdp-in').value.trim();
+        if(!text) return;
+        await handleScan(text); 
+    }
+
+    async function handleManualAnswer() {
+        const text = getEl('host-sdp-in').value.trim();
+        if(!text) return;
+        await handleScan(text);
+    }
+    
+    // --- STANDARD APP LOGIC ---
+    function finishOnboarding() { localStorage.setItem('skipIntro', 'true'); getEl('onboarding-overlay').classList.remove('visible'); }
+    function resetOnboarding() { localStorage.removeItem('skipIntro'); location.reload(); }
+    function toggleBeginnerMode() {
+        document.body.classList.toggle('beginner-mode');
+        const active = document.body.classList.contains('beginner-mode');
+        getEl('lbl-beginner').innerText = active ? 'ON' : 'OFF';
+        getEl('lbl-beginner').style.color = active ? 'var(--success)' : '#64748b';
+        localStorage.setItem('beginnerMode', active);
+        toggleMenu(); 
+    }
+    function toggleSendFileMode() {
+        document.body.classList.toggle('files-only');
+        const active = document.body.classList.contains('files-only');
+        getEl('lbl-filemode').innerText = active ? 'ON' : 'OFF';
+        getEl('lbl-filemode').style.color = active ? 'var(--success)' : '#64748b';
+        toggleMenu();
+    }
+    
+    async function toggleWakeLock(active) {
+        if (!('wakeLock' in navigator)) return;
+        try {
+            if (active && !wakeLock) wakeLock = await navigator.wakeLock.request('screen');
+            else if (!active && wakeLock) { await wakeLock.release(); wakeLock = null; }
+        } catch(err) { log("WakeLock Error: " + err, 'VERBOSE'); }
+    }
+
+    function showLoading(msg, hint = "Please check your browser permission prompts") {
+        document.getElementById('loading-msg').innerText = msg;
+        document.getElementById('loading-hint').innerText = hint;
+        document.getElementById('loading-overlay').classList.add('visible');
+    }
+    function hideLoading() { document.getElementById('loading-overlay').classList.remove('visible'); }
+    function toggleDebug() { getEl('debug-panel').classList.toggle('visible'); getEl('main-menu').classList.remove('visible'); }
+    function cycleLogLevel() { logLevel = logLevel === 'INFO' ? 'VERBOSE' : 'INFO'; getEl('lbl-loglevel').innerText = logLevel; }
+    function copyLogs() { navigator.clipboard.writeText(getEl('debug-content').innerText).then(() => alert("Logs copied to clipboard")); }
+    async function openNetworkConfig() {
+        toggleMenu(); getEl('net-modal').classList.add('visible');
+        getEl('ip-list').innerHTML = '<div style="padding:20px;text-align:center;color:#aaa">Scanning Network Interfaces...</div>';
+        try { const ips = await gatherLocalIPs(); renderIPList(ips); } catch(e) { getEl('ip-list').innerHTML = `<div style="color:var(--danger)">Scan Failed: ${e.message}</div>`; }
+    }
+    function closeNetworkConfig() { getEl('net-modal').classList.remove('visible'); }
+    function renderIPList(detectedIPs) {
+        const list = getEl('ip-list'); list.innerHTML = "";
+        const unique = new Set([...detectedIPs, ...manualIPs]);
+        if(unique.size === 0) { list.innerHTML = '<div style="color:#64748b;font-size:0.85rem;text-align:center">No IPs detected.</div>'; return; }
+        unique.forEach(ip => {
+            const isV6 = ip.includes(':'); const checked = manualIPs.includes(ip) ? 'checked' : '';
+            const row = document.createElement('div'); row.className = 'ip-row';
+            row.innerHTML = `<input type="checkbox" value="${ip}" ${checked} style="pointer-events:none"><span style="font-family:monospace; font-size:0.9rem; color:${isV6?'#a5b4fc':'#93c5fd'}">${ip}</span><span style="margin-left:auto; font-size:0.7rem; color:#64748b; font-weight:bold">${isV6?'IPv6':'IPv4'}</span>`;
+            row.onclick = (e) => { if(e.target.type !== 'checkbox') { const cb = row.querySelector('input'); cb.checked = !cb.checked; } };
+            list.appendChild(row);
+        });
+    }
+    function addCustomIP() {
+        const ip = getEl('custom-ip').value.trim();
+        if(ip) { manualIPs.push(ip); renderIPList([...Array.from(document.querySelectorAll('#ip-list input')).map(i=>i.value), ip]); getEl('custom-ip').value = ""; }
+    }
+    function saveNetworkConfig() { manualIPs = Array.from(document.querySelectorAll('#ip-list input:checked')).map(i=>i.value); closeNetworkConfig(); }
+    async function gatherLocalIPs() {
+        return new Promise((resolve) => {
+            const ips = new Set(); const pc = new RTCPeerConnection({ iceCandidatePoolSize: 1 });
+            pc.createDataChannel('');
+            pc.onicecandidate = (e) => { if (e.candidate) { const ip = e.candidate.candidate.split(' ')[4]; if (ip && !ip.endsWith('.local')) ips.add(ip); } };
+            pc.createOffer().then(d => pc.setLocalDescription(d)); setTimeout(() => { pc.close(); resolve(Array.from(ips)); }, 1000);
+        });
+    }
+    function log(msg, level = 'INFO') {
+        if(level === 'VERBOSE' && logLevel !== 'VERBOSE') return;
+        const pan = getEl('debug-content'); const d = document.createElement('div');
+        let cls = 'log-entry'; if (level === 'VERBOSE') cls += ' log-v'; else if (msg.includes('Error') || msg.includes('Fail')) cls += ' log-err'; else if (msg.includes('Success') || msg.includes('Connected')) cls += ' log-success';
+        d.className = cls; d.innerHTML = `<span style="opacity:0.5; font-size:0.85em; margin-right:8px">[${new Date().toLocaleTimeString('en-US',{hour12:false,hour:"2-digit",minute:"2-digit",second:"2-digit"})}]</span>${msg}`;
+        pan.appendChild(d); pan.scrollTop = pan.scrollHeight; 
+        console.log(`[${level}] ${msg}`);
+    }
+
+    // --- CORE INIT ---
+    async function initHost() {
+        isHost = true;
+        getEl('role-select').classList.add('hidden');
+        showLoading("Initializing Host...", "Allow Camera Permissions");
+        try {
+            keepAliveStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            getEl('hidden-video').srcObject = keepAliveStream;
+            const ips = await gatherLocalIPs(); window.myLocalIPs = ips; 
+            log(`Host IPs detected: [${ips.join(', ')}]`, 'SUCCESS');
+            hideLoading(); setupConnection();
+        } catch(e) {
+            hideLoading(); alert("Camera failed. Switching to Manual Mode.");
+            log("Camera Init Failed: " + e, 'ERR');
+            setupConnection(); toggleManualMode('display'); 
+        }
+    }
+
+    async function initReceiver() {
+        isHost = false;
+        getEl('role-select').classList.add('hidden');
+        log("Initializing GUEST...", 'INFO');
+        try { const ips = await gatherLocalIPs(); window.myLocalIPs = ips; log(`Guest IPs detected: [${ips.join(', ')}]`, 'SUCCESS'); setupConnection(); } catch(e) { setupConnection(); }
+    }
+
+    function setupConnection() {
+        pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], iceCandidatePoolSize: 2 });
+        pc.oniceconnectionstatechange = () => {
+            const s = pc.iceConnectionState; updateStatus(s);
+            log(`ICE State: ${s}`, 'INFO');
+            if (s === 'connected') { log("Connection Established.", 'SUCCESS'); toggleWakeLock(true); vibe([100, 50, 100]); }
+            if(s === 'failed' || s === 'closed') handleEnd();
+        };
+        pc.ondatachannel = (e) => { log("Data Channel Received", 'VERBOSE'); setupDC(e.channel); }
+        pc.onicecandidate = (e) => { if(e.candidate) log(`Gathered: ${e.candidate.candidate.trim()}`, 'VERBOSE'); };
+        pc.ontrack = (e) => {
+            log("Track Received", 'VERBOSE');
+            const rv = getEl('remote-video');
+            if(rv.srcObject !== e.streams[0]) { rv.srcObject = e.streams[0]; getEl('call-overlay').classList.add('visible'); vibe([500, 200, 500]); }
+        };
+        if (isHost) { log("Creating Data Channel", 'VERBOSE'); const dc = pc.createDataChannel("chat", { ordered: true }); setupDC(dc); createOffer(); } else { startScanner(); }
+    }
+
+    async function createOffer() {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        log("Offer Created", 'VERBOSE');
+        await waitForGathering();
+        showQR(pc.localDescription.sdp, "offer");
+    }
+
+    async function waitForGathering() {
+        return new Promise(r => {
+            if(pc.iceGatheringState === 'complete') r();
+            else { const t = setTimeout(() => { log("Gathering Timeout", 'WARN'); r(); }, 2500); pc.onicegatheringstatechange = () => { if(pc.iceGatheringState === 'complete') { clearTimeout(t); r(); }}; }
+        });
+    }
+
+    function compressSDP(sdp) {
+        const u = sdp.match(/a=ice-ufrag:(.*)/)[1].trim(); const p = sdp.match(/a=ice-pwd:(.*)/)[1].trim(); const f = sdp.match(/a=fingerprint:(.*)/)[1].trim();
+        let cands = [...sdp.matchAll(/a=candidate:(.*)/g)].map(m => {
+            const part = m[1].split(' '); return { raw: m[1], ip: part[4], port: part[5], proto: part[2].toLowerCase(), type: part[7] };
+        });
+        cands.forEach(c => { c.score = 10; if(c.ip.match(/^192\.168\.|^10\.|^172\./)) c.score = 1; else if(c.ip.includes(':')) c.score = 2; });
+        cands.sort((a,b) => a.score - b.score);
+        const best = [...new Set(cands.map(c => `${c.ip}:${c.port}:${c.proto}`))].slice(0, 4); 
+        return `${manualIPs.length>0?'!':''}${u}|${p}|${f}|${best.join('~')}`;
+    }
+
+    function showQR(sdp, type) {
+        const compressed = compressSDP(sdp);
+        const data = (type === 'offer' ? 'O' : 'A') + compressed;
+        log(`Showing QR (${type})`, 'INFO');
+        
+        getEl('step-qr').classList.remove('hidden');
+        getEl('step-scan').classList.add('hidden'); 
+        getEl('qrcode').innerHTML = "";
+        
+        getEl('manual-share-text').value = data; 
+        new QRCode(getEl('qrcode'), { text: data, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.L });
+        
+        if(isHost) {
+            getEl('qr-hint').innerText = "Scan on Guest Device";
+            getEl('manual-display-label').innerText = "1. Copy this code & send to Guest:";
+            getEl('btn-scan-answer').classList.remove('hidden');
+            if(!getEl('manual-display-area').classList.contains('hidden')) getEl('host-manual-answer').classList.remove('hidden');
+        } else {
+            getEl('qr-hint').innerText = "Scan on Host Device";
+            getEl('manual-display-label').innerText = "2. Copy this code & send to Host:";
+            getEl('btn-scan-answer').classList.add('hidden');
+            getEl('host-manual-answer').classList.add('hidden'); 
+            
+            if(!getEl('guest-manual-area').classList.contains('hidden')) {
+                getEl('manual-display-area').classList.remove('hidden');
+                getEl('qr-container').classList.add('hidden');
+            }
+        }
+    }
+
+    async function startScanner() {
+        if(keepAliveStream) { keepAliveStream.getTracks().forEach(t => t.stop()); keepAliveStream = null; }
+        getEl('step-qr').classList.add('hidden'); 
+        showLoading("Starting Scanner...");
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            const v = getEl('video'); v.srcObject = stream; v.style.display = 'block'; 
+            await v.play(); hideLoading(); 
+            getEl('step-scan').classList.remove('hidden'); requestAnimationFrame(scanTick);
+            log("Scanner Active", 'INFO');
+        } catch(e) { 
+            hideLoading();
+            alert("Camera access denied or failed. Switching to Manual Mode.");
+            log("Scanner Failed: " + e, 'ERR');
+            getEl('step-qr').classList.add('hidden');
+            getEl('step-scan').classList.remove('hidden');
+            getEl('video').classList.add('hidden'); 
+            getEl('guest-manual-area').classList.remove('hidden'); 
+            getEl('guest-manual-link').classList.add('hidden');
+        }
+    }
+
+    function scanTick() {
+        const v = getEl('video');
+        if (v.readyState === v.HAVE_ENOUGH_DATA && !getEl('step-scan').classList.contains('hidden')) {
+            const cvs = document.createElement("canvas"); cvs.width = v.videoWidth; cvs.height = v.videoHeight;
+            const ctx = cvs.getContext('2d'); ctx.drawImage(v, 0, 0);
+            const code = jsQR(ctx.getImageData(0, 0, cvs.width, cvs.height).data, cvs.width, cvs.height);
+            if (code) { if(stream) stream.getTracks().forEach(t => t.stop()); handleScan(code.data); return; }
+        }
+        requestAnimationFrame(scanTick);
+    }
+
+    async function handleScan(data) {
+        try {
+            log("QR Scanned/Pasted", 'INFO');
+            getEl('video').pause();
+            getEl('step-scan').classList.add('hidden'); 
+            showLoading("Negotiating...");
+
+            const type = data[0] === 'O' ? 'offer' : 'answer';
+            const sdp = decompressSDP(data.substring(1), type);
+            const desc = new RTCSessionDescription({ type: type, sdp: sdp });
+            await pc.setRemoteDescription(desc);
+
+            if (type === 'offer') {
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                await waitForGathering();
+                hideLoading();
+                showQR(pc.localDescription.sdp, "answer");
+            }
+        } catch(e) { log("Handshake Error: " + e, 'ERR'); }
+    }
+    
+    function decompressSDP(essence, type) {
+         let payload = essence; if (payload.startsWith('!')) payload = payload.substring(1);
+         const [u, p, f, candStr] = payload.split('|');
+         const cleanF = f.replace(/sha-256 /i, "").trim();
+         const role = type === 'offer' ? 'actpass' : 'active';
+         let sdp = `v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=msid-semantic: WMS\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ice-ufrag:${u}\r\na=ice-pwd:${p}\r\na=fingerprint:sha-256 ${cleanF}\r\na=setup:${role}\r\na=mid:0\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n`;
+         if(candStr) {
+            candStr.split('~').forEach(c => {
+                const parts = c.split(':'); let ip, port, proto;
+                if(parts.length === 3) { [ip, port, proto] = parts; } else { proto = parts.pop(); port = parts.pop(); ip = parts.join(':'); }
+                let prio = ip.match(/^192\.|^10\./) ? 2122260223 : 1686052607;
+                sdp += `a=candidate:0 1 ${proto} ${prio} ${ip} ${port} typ host\r\n`;
+            });
+         }
+         sdp += "a=end-of-candidates\r\n"; return sdp;
+    }
+
+    // --- UI/UX ---
+    function updateStatus(s) {
+        const dot = getEl('status-dot'); const txt = getEl('status-text');
+        if(s === 'connected' || s === 'completed') { dot.className = 'dot connected'; txt.innerText = 'Online'; }
+        else if(s === 'disconnected') { dot.className = 'dot reconnecting'; txt.innerText = 'Reconnecting'; }
+        else { dot.className = 'dot'; txt.innerText = s; }
+    }
+
+    function setupDC(c) {
+        dc = c;
+        dc.onopen = () => {
+            log("Data Channel OPEN", 'SUCCESS');
+            getEl('setup-panel').classList.add('hidden'); getEl('room-panel').classList.remove('hidden');
+            getEl('btn-leave').classList.remove('hidden'); getEl('btn-call').classList.remove('hidden');
+            addSysMsg("Secure Connection Established."); hideLoading();
+            if(!localStorage.getItem('sawHint')) { getEl('attach-hint').classList.remove('hidden'); setTimeout(() => { getEl('attach-hint').classList.add('hidden'); localStorage.setItem('sawHint', 'true'); }, 5000); }
+        };
+        dc.onclose = handleEnd; dc.onmessage = handleMsg;
+    }
+    function handleEnd() { hideLoading(); updateStatus('disconnected'); addSysMsg("Session Ended."); toggleWakeLock(false); log("Session Ended", 'WARN'); }
+    function confirmLeave() { if(confirm("Leave?")) { if(pc) pc.close(); location.reload(); } }
+
+    // --- QUEUE & CONTROLS ---
+    function handleFiles(files) {
+        if(!dc || dc.readyState !== 'open') return;
+        for(let i=0; i<files.length; i++) fileQueue.push(files[i]);
+        processQueue();
+    }
+
+    function processQueue() {
+        if(activeTransfer || fileQueue.length === 0) return;
+        
+        const file = fileQueue[0]; 
+        const id = Date.now();
+        activeTransfer = { id: id, file: file, offset: 0, paused: false };
+        transferState = 'active'; 
+        
+        log(`Queueing File: ${file.name}`, 'INFO');
+        dc.send(JSON.stringify({ type: 'file-offer', name: file.name, size: file.size, id: id }));
+        addSysMsg(`Offering: ${file.name} (Waiting...)`);
+    }
+
+    function toggleTransfer(id) {
+        if(transferState === 'active') {
+            // PAUSE
+            log("Pausing Transfer...", 'INFO');
+            if(activeTransfer && activeTransfer.id === id) { 
+                activeTransfer.paused = true; 
+                dc.send(JSON.stringify({ type: 'file-pause', id: id })); // Notify Peer!
+            } else { 
+                dc.send(JSON.stringify({ type: 'file-pause', id: id })); 
+            }
+            updateTransferControls(id, 'paused');
+        } else if(transferState === 'paused') {
+            // RESUME
+            log("Resuming Transfer...", 'INFO');
+            if(activeTransfer && activeTransfer.id === id) { 
+                activeTransfer.paused = false; 
+                dc.send(JSON.stringify({ type: 'file-resume', id: id })); // Notify Peer!
+                transferLoop(); 
+            } else { 
+                dc.send(JSON.stringify({ type: 'file-resume', id: id })); 
+            }
+            updateTransferControls(id, 'active');
+        }
+    }
+
+    function cancelTransfer(id) {
+        log("Cancelling Transfer...", 'WARN');
+        if(activeTransfer && activeTransfer.id === id) { 
+            activeTransfer = null; 
+            dc.send(JSON.stringify({ type: 'file-cancel', id: id }));
+            updateTransferControls(id, 'cancelled');
+            fileQueue.shift(); processQueue();
+        } else if (fileMeta && fileMeta.id === id) {
+             dc.send(JSON.stringify({ type: 'file-cancel', id: id }));
+             fileMeta = null; fileBuffer = [];
+             updateTransferControls(id, 'cancelled');
+             addSysMsg("Download Cancelled.");
+        }
+    }
+
+    function handleMsg(e) {
+        const data = e.data;
+        if (typeof data === 'string') {
+            try {
+                const msg = JSON.parse(data);
+                if (msg.type === 'chat') { renderMsg(msg.text, 'peer'); vibe(100); } 
+                else if (msg.type === 'file-offer') { pendingFileReq = msg; showFileAcceptModal(msg); vibe(200); }
+                else if (msg.type === 'file-accept') { log("File Accepted", 'SUCCESS'); startTransfer(); }
+                else if (msg.type === 'file-reject') { 
+                    addSysMsg("File declined."); 
+                    activeTransfer = null; 
+                    fileQueue.shift(); processQueue(); 
+                    vibe([50, 50, 50]); 
+                }
+                else if (msg.type === 'file-pause') {
+                    log("Remote Pause Received", 'INFO');
+                    if(activeTransfer && activeTransfer.id === msg.id) activeTransfer.paused = true;
+                    updateTransferControls(msg.id, 'paused');
+                }
+                else if (msg.type === 'file-resume') {
+                    log("Remote Resume Received", 'INFO');
+                    if(activeTransfer && activeTransfer.id === msg.id) {
+                        activeTransfer.paused = false;
+                        transferLoop();
+                    }
+                    updateTransferControls(msg.id, 'active');
+                }
+                else if (msg.type === 'file-cancel') {
+                    log("Remote Cancel Received", 'WARN');
+                    if(activeTransfer && activeTransfer.id === msg.id) {
+                         activeTransfer = null; fileQueue.shift(); processQueue();
+                    } else if (fileMeta && fileMeta.id === msg.id) {
+                        fileMeta = null; fileBuffer = [];
+                    }
+                    updateTransferControls(msg.id, 'cancelled');
+                    addSysMsg("Peer Cancelled Transfer.");
+                }
+                else if (msg.type === 'call-offer') { handleCallOffer(msg.sdp); }
+                else if (msg.type === 'call-answer') { handleCallAnswer(msg.sdp); }
+                else if (msg.type === 'call-reject') { addSysMsg("Call Rejected by Peer."); endCall(false); vibe([50, 50, 50]); }
+                else if (msg.type === 'call-end') { endCall(false); }
+            } catch(err) { log("Msg Parse Error: " + err, 'ERR'); }
+        } else {
+            if (!fileMeta) return;
+            fileBuffer.push(data); receivedSize += data.byteLength;
+            const pct = Math.floor((receivedSize / fileMeta.size) * 100);
+            updateProgressBar(fileMeta.id, pct, receivedSize, fileMeta.size);
+            if (receivedSize >= fileMeta.size) {
+                log("File Download Complete", 'SUCCESS');
+                const blob = new Blob(fileBuffer, { type: getMimeType(fileMeta.name) });
+                const url = URL.createObjectURL(blob);
+                updateProgressBar(fileMeta.id, 100, fileMeta.size, fileMeta.size);
+                updateTransferControls(fileMeta.id, 'finished'); 
+                renderDownload(url, fileMeta.name, blob.type);
+                addSysMsg(`Received ${fileMeta.name}`); vibe(500); fileMeta = null; fileBuffer = [];
+            }
+        }
+    }
+    
+    getEl('file-input').addEventListener('change', (e) => { if(e.target.files.length) handleFiles(e.target.files); e.target.value = ''; });
+    function showFileAcceptModal(msg) { getEl('req-filename').innerText = msg.name; getEl('req-filesize').innerText = (msg.size / (1024*1024)).toFixed(2) + " MB"; getEl('file-req-modal').classList.add('visible'); }
+    function rejectFile() { getEl('file-req-modal').classList.remove('visible'); dc.send(JSON.stringify({ type: 'file-reject' })); pendingFileReq = null; }
+    
+    function acceptFile() { 
+        getEl('file-req-modal').classList.remove('visible'); 
+        if(!pendingFileReq) return; 
+        fileMeta = pendingFileReq; 
+        fileBuffer = []; 
+        receivedSize = 0; 
+        renderProgressMsg(fileMeta.name, fileMeta.id, 'peer'); 
+        
+        // ** FIX: Set Receiver state to Active so Pause button works immediately **
+        transferState = 'active'; 
+        
+        dc.send(JSON.stringify({ type: 'file-accept' })); 
+        pendingFileReq = null; 
+    }
+
+    async function startTransfer() {
+        if(!activeTransfer) return;
+        renderProgressMsg(activeTransfer.file.name, activeTransfer.id, 'me');
+        const buf = await activeTransfer.file.arrayBuffer();
+        activeTransfer.buffer = buf;
+        transferLoop();
+    }
+
+    function transferLoop() {
+        if (!dc || dc.readyState !== 'open' || !activeTransfer || activeTransfer.paused) return;
+        
+        const buf = activeTransfer.buffer;
+        while(activeTransfer.offset < buf.byteLength) {
+            if(activeTransfer.paused) return; 
+            if(dc.bufferedAmount > 1024 * 1024) { setTimeout(transferLoop, 10); return; }
+            
+            const chunk = buf.slice(activeTransfer.offset, activeTransfer.offset + CHUNK_SIZE);
+            dc.send(chunk);
+            activeTransfer.offset += CHUNK_SIZE;
+            
+            const pct = Math.floor((activeTransfer.offset / buf.byteLength) * 100);
+            updateProgressBar(activeTransfer.id, pct, activeTransfer.offset, buf.byteLength);
+        }
+        
+        // Done
+        log("File Sent Successfully", 'SUCCESS');
+        activeTransfer = null;
+        fileQueue.shift(); 
+        vibe(100);
+        processQueue(); 
+    }
+
+    async function startCall() {
+        try {
+            callStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            getEl('local-video').srcObject = callStream; getEl('call-overlay').classList.add('visible');
+            callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
+            const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+            dc.send(JSON.stringify({ type: 'call-offer', sdp: offer }));
+        } catch(e) { alert("Call failed: " + e); }
+    }
+    async function handleCallOffer(offerSDP) {
+        if(confirm("Incoming Video Call. Accept?")) {
+            getEl('call-overlay').classList.add('visible');
+            try {
+                callStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                getEl('local-video').srcObject = callStream;
+                callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
+                await pc.setRemoteDescription(new RTCSessionDescription(offerSDP));
+                const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
+                dc.send(JSON.stringify({ type: 'call-answer', sdp: answer }));
+            } catch(e) {}
+        } else { dc.send(JSON.stringify({ type: 'call-reject' })); }
+    }
+    async function handleCallAnswer(answerSDP) { await pc.setRemoteDescription(new RTCSessionDescription(answerSDP)); }
+    function toggleMute() { if(callStream) { const audioTrack = callStream.getAudioTracks()[0]; if(audioTrack) { audioTrack.enabled = !audioTrack.enabled; getEl('local-video').style.opacity = audioTrack.enabled ? "1" : "0.5"; } } }
+    function endCall(notifyPeer = true) { if(callStream) { callStream.getTracks().forEach(t => { t.stop(); }); callStream = null; } getEl('call-overlay').classList.remove('visible'); if(notifyPeer && dc) dc.send(JSON.stringify({ type: 'call-end' })); }
+
+    function getMimeType(filename) { const ext = filename.split('.').pop().toLowerCase(); if(['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image/' + ext; if(['mp4','webm','ogg'].includes(ext)) return 'video/' + ext; if(['mp3','wav'].includes(ext)) return 'audio/' + ext; if(ext === 'pdf') return 'application/pdf'; return 'application/octet-stream'; }
+    function sendText() { const i = getEl('msg-input'); if(i.value.trim() && dc) { dc.send(JSON.stringify({ type: 'chat', text: i.value.trim() })); renderMsg(i.value.trim(), 'me'); i.value=""; } }
+    getEl('msg-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendText(); });
+
+    function renderMsg(txt, type) { const h = getEl('chat-history'); const row = document.createElement('div'); row.className = `msg-row ${type}`; const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; bubble.innerText = txt; const time = document.createElement('div'); time.className = 'msg-time'; time.innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); row.appendChild(bubble); row.appendChild(time); h.appendChild(row); h.scrollTop = h.scrollHeight; }
+    function addSysMsg(txt) { const h = getEl('chat-history'); const d = document.createElement('div'); d.className = 'sys-msg'; d.innerText = txt; h.appendChild(d); h.scrollTop = h.scrollHeight; }
+    
+    function renderProgressMsg(filename, id, type) { 
+        const h = getEl('chat-history'); const row = document.createElement('div'); row.className = `msg-row ${type}`; 
+        const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; bubble.style.width = "220px"; 
+        
+        // Material Controls
+        const controls = `
+            <div id="ctrl-box-${id}" class="file-controls">
+                <button id="btn-toggle-${id}" class="ctrl-btn" onclick="toggleTransfer(${id})">⏸</button>
+                <button class="ctrl-btn btn-cancel" onclick="cancelTransfer(${id})">❌</button>
+            </div>`;
+
+        bubble.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis;">${type==='me'?'Sending':'Receiving'} ${filename}</div><div class="file-progress-container"><div id="prog-bar-${id}" class="file-progress-bar"></div></div><div id="prog-text-${id}" class="file-stat-text"><span>0%</span><span>0 MB</span></div>${controls}`; 
+        row.appendChild(bubble); h.appendChild(row); h.scrollTop = h.scrollHeight; 
+    }
+    
+    function updateTransferControls(id, state) {
+        transferState = state;
+        const box = getEl(`ctrl-box-${id}`);
+        const btnToggle = getEl(`btn-toggle-${id}`);
+        const bar = getEl(`prog-bar-${id}`);
+        const txt = getEl(`prog-text-${id}`);
+        
+        if(!box || !btnToggle) return;
+
+        if (state === 'active') {
+            btnToggle.innerText = "⏸"; 
+            bar.classList.remove('paused', 'cancelled');
+        } else if (state === 'paused') {
+            btnToggle.innerText = "▶"; 
+            bar.classList.add('paused');
+        } else if (state === 'cancelled') {
+            box.style.display = 'none'; 
+            bar.classList.add('cancelled'); bar.style.width = "100%";
+            if(txt) txt.innerText = "Cancelled";
+        } else if (state === 'finished') {
+            box.style.display = 'none'; 
+        }
+    }
+
+    function updateProgressBar(id, pct, currentBytes, totalBytes) { 
+        const bar = document.getElementById(`prog-bar-${id}`); const txt = document.getElementById(`prog-text-${id}`); 
+        if(bar && txt && pct !== null) { 
+            pct = Math.min(100, pct); bar.style.width = pct + "%"; 
+            const mb = (currentBytes / (1024*1024)).toFixed(1); const total = (totalBytes / (1024*1024)).toFixed(1); 
+            txt.innerHTML = `<span>${pct}%</span><span>${mb}/${total} MB</span>`; 
+            if(pct >= 100) updateTransferControls(id, 'finished');
+        } 
+    }
+    
+    async function renderDownload(url, name, type) { 
+        const h = getEl('chat-history'); const row = document.createElement('div'); row.className = 'msg-row peer'; const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; 
+        
+        if(type.startsWith('image/')) { const img = document.createElement('img'); img.src = url; img.className = 'img-preview'; bubble.appendChild(img); }
+        else if(type.startsWith('video/')) { const v = document.createElement('video'); v.src = url; v.controls = true; v.className = 'media-preview'; bubble.appendChild(v); }
+        else if(type.startsWith('audio/')) { const a = document.createElement('audio'); a.src = url; a.controls = true; a.className = 'media-preview'; bubble.appendChild(a); }
+        
+        // SAVE BUTTON (File System API)
+        let saveBtn = '';
+        if(window.showSaveFilePicker) {
+            saveBtn = `<button class="btn-sm btn-sec" style="margin-top:8px; width:100%" onclick="saveFileToDisk('${url}', '${name}')">💾 Save As...</button>`;
+        }
+
+        const link = document.createElement('div');
+        link.innerHTML = `<a href="${url}" download="${name}" style="color:#4ade80; display:block; margin-top:8px;">📄 Download ${name}</a>${saveBtn}`;
+        
+        bubble.appendChild(link); 
+        row.appendChild(bubble); h.appendChild(row); h.scrollTop = h.scrollHeight; 
+    }
+
+    async function saveFileToDisk(url, name) {
+        try {
+            const handle = await window.showSaveFilePicker({ suggestedName: name });
+            const writable = await handle.createWritable();
+            const response = await fetch(url);
+            await response.body.pipeTo(writable);
+            addSysMsg("File Saved Successfully!");
+        } catch(e) { log("Save Failed: " + e, 'ERR'); }
+    }
+
+    function downloadTranscript() { const h = getEl('chat-history'); let txt = "CHAT TRANSCRIPT\n\n"; h.querySelectorAll('.msg-row').forEach(row => { const sender = row.classList.contains('me') ? "ME" : "PEER"; const bubble = row.querySelector('.msg-bubble'); const text = bubble.innerText.replace(/\n/g, ' '); const time = row.querySelector('.msg-time') ? row.querySelector('.msg-time').innerText : ""; txt += `[${time}] ${sender}: ${text}\n`; }); const blob = new Blob([txt], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `chat-${Date.now()}.txt`; a.click(); toggleMenu(); }
+
+    window.addEventListener('load', initApp);
+</script>
+</body>
+</html>
