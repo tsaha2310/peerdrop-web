@@ -10,6 +10,8 @@ cloud server.
 > sign-ups, no tracking, and no file size limits (dependent on device
 > RAM/Storage).
 
+Live: (PeerDrop Web)[https://tsaha2310.github.io/peerdrop-web/]
+
 ## ✨ Key Features
 
 -   📂 **File & Folder Transfer:**
@@ -81,7 +83,9 @@ PeerDrop is a **Single File Application**.
 1.  Open PeerDrop on Device A (Host) and Device B (Guest).
 
 2.  **Device A:** Click **\"Start Room (HOST)\"**. A QR code will
-    appear.
+    appear. A link will also be generated which can be shared via
+    a messenger app. The guest can click on this link to join and
+    proceed directly to Step 4 below.
 
 3.  **Device B:** Click **\"Join Room (GUEST)\"**.
 
