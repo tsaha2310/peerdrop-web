@@ -515,7 +515,6 @@
 <div id="main-menu">
     <div class="menu-section">Preferences</div>
     <button class="menu-item" onclick="toggleBeginnerMode()">Beginner Mode <span id="lbl-beginner" style="float:right; color:var(--success); font-weight:bold;">ON</span></button>
-    <button class="menu-item" onclick="toggleSendFileMode()">Quick Mode: Send Files <span id="lbl-filemode" style="float:right; color:#64748b; font-size:0.8em">OFF</span></button>
     
     <button class="menu-item" onclick="resetOnboarding()">Replay Tutorial</button>
     <button id="btn-install" class="menu-item hidden" onclick="installPWA()">📲 Install App</button>
@@ -528,9 +527,7 @@
     <button class="menu-item advanced-only" onclick="dumpStats()">Dump Stats</button>
     <button class="menu-item advanced-only" onclick="cycleLogLevel()">Log Level: <span id="lbl-loglevel" style="color:var(--success)">VERBOSE</span></button>
     <div class="menu-section">Session</div>
-    <button class="menu-item" onclick="downloadTranscript()">Download Chat</button>
     <button class="menu-item" onclick="location.reload()" style="color:var(--danger)">Reset App</button>
-    <div>2026.01.17.iter.15.1</div>
 </div>
 
 <div id="net-modal" class="modal-overlay">
@@ -989,14 +986,6 @@
         toggleMenu(); 
     }
     
-    function toggleSendFileMode() {
-        document.body.classList.toggle('files-only');
-        const active = document.body.classList.contains('files-only');
-        getEl('lbl-filemode').innerText = active ? 'ON' : 'OFF';
-        getEl('lbl-filemode').style.color = active ? 'var(--success)' : '#64748b';
-        toggleMenu();
-    }
-    
     async function toggleWakeLock(active) {
         if (!('wakeLock' in navigator)) return;
         try {
@@ -1054,6 +1043,7 @@
     }
 
     async function dumpStats() {
+        toggleMenu(); 
         if (!pc) { log("No active connection.", 'WARN'); return; }
         
         const now = Date.now();
@@ -2589,8 +2579,6 @@
             showToast("File Saved Successfully!");
         } catch(e) { log("Save Failed: " + e, 'ERR'); }
     }
-
-    function downloadTranscript() { const h = getEl('chat-history'); let txt = "CHAT TRANSCRIPT\n\n"; h.querySelectorAll('.msg-row').forEach(row => { const sender = row.classList.contains('me') ? "ME" : "PEER"; const bubble = row.querySelector('.msg-bubble'); const text = bubble.innerText.replace(/\n/g, ' '); const time = row.querySelector('.msg-time') ? row.querySelector('.msg-time').innerText : ""; txt += `[${time}] ${sender}: ${text}\n`; }); const blob = new Blob([txt], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `chat-${Date.now()}.txt`; a.click(); toggleMenu(); }
 
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
