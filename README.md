@@ -10,7 +10,7 @@ cloud server.
 > sign-ups, no tracking, and no file size limits (dependent on device
 > RAM/Storage).
 
-Live: (PeerDrop Web)[https://tsaha2310.github.io/peerdrop-web/]
+[PeerDrop Web Live](https://tsaha2310.github.io/peerdrop-web/)
 
 ## ✨ Key Features
 
