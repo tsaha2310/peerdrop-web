@@ -7,12 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PeerDrop Web</title>
     <meta name="theme-color" content="#0f172a">
-    <meta name="description" content="Secure Peer-to-peer file sharing and chat in your browser">
+    <meta name="description" content="Secure Peer-to-peer file/screen sharing and chat in your browser">
     
     <link rel="manifest" href="data:application/manifest+json;base64,ewogICJuYW1lIjogIlBlZXJEcm9wIFdlYiIsCiAgInNob3J0X25hbWUiOiAiUGVlckRyb3AiLAogICJzdGFydF91cmwiOiAiLiIsCiAgImRpc3BsYXkiOiAic3RhbmRhbG9uZSIsCiAgImJhY2tncm91bmRfY29sb3IiOiAiIzBmMTcyYSIsCiAgInRoZW1lX2NvbG9yIjogIiMzYjgyZjYiLAogICJpY29ucyI6IFwW1ld2hpbGUyNSB7IGZpbGw6ICMzYjgyZjY7IH0gPC9zdHlsZT4gPHBhdGggY2xhc3M9ImZpbGUyNSIgZD0iTTEwMCwyMCBDNjAsODAgMjAsMTIwIDIwLDE1NSBDMjAsMTk1IDU1LDIyNSAxMDAsMjI1IEMxNDUsMjI1IDE4MCwxOTUgMTgwLDE1NSBDMTgwLDEyMCAxNDAsODAgMTAwLDIwIFoiIC8+IDwvc3ZnPiIgdHlwZT0iaW1hZ2Uvc3ZnK3htbCIKICAgIH0KICBdLAogICJzaGFyZV90YXJnZXQiOiB7CiAgICAiYWN0aW9uIjogIi4iLAogICAgIm1ldGhvZCI6ICJHRVQiLAogICAgInBhcmFtcyI6IHsKICAgICAgInRpdGxlIjogInRpdGxlIiwKICAgICAgInRleHQiOiAidGV4dCIsCiAgICAgICJ1cmwiOiAidXJsIgogICAgfQogIH0KfQ==">
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.4.4/lz-string.min.js"></script>
+
     <style>
         :root { --bg: #0f172a; --panel: #1e293b; --border: #334155; --primary: #3b82f6; --danger: #ef4444; --success: #10b981; --warn: #f59e0b; --text: #f8fafc; --me-bg: #2563eb; --peer-bg: #334155; }
         * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
@@ -21,7 +23,8 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background: var(--bg); color: var(--text); 
             margin: 0; padding: 0; 
-            height: 100dvh; 
+            /* Force app to fit within visible OS window (Mobile Safe) */
+            position: fixed; inset: 0; height: 100%; 
             display: flex; flex-direction: column; overflow: hidden; 
         }
 
@@ -70,11 +73,18 @@
         .sdp-text { width: 100%; height: 80px; background: #020617; color: #a5b4fc; border: 1px solid #334155; font-family: monospace; font-size: 0.75rem; padding: 8px; border-radius: 4px; margin-bottom: 8px; resize: none; }
         .manual-label { font-size: 0.85rem; color: #94a3b8; margin-bottom: 5px; display: block; font-weight: bold; }
         .manual-link { color:#64748b; font-size:0.8rem; margin-top:10px; display:block; text-decoration: underline; cursor: pointer;}
+        .link-copy-box { display: flex; gap: 5px; margin-bottom: 10px; }
 
         /* CHAT ROOM */
         #room-panel { display: flex; flex-direction: column; height: 100%; background: #0b1120; }
         #chat-history { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 12px; }
-        
+
+        /* TOAST NOTIFICATION */
+        #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; pointer-events: none; }
+        .toast { background: #334155; color: white; padding: 12px 24px; border-radius: 30px; margin-top: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-size: 0.9rem; opacity: 0; transform: translateY(20px); transition: 0.3s cubic-bezier(0.18, 0.89, 0.32, 1.28); display: flex; align-items: center; gap: 8px; border: 1px solid #475569; pointer-events: auto; }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast-icon { font-size: 1.1rem; }
+
         /* FILE SEND MODE */
         body.files-only #chat-history { display: none; }
         body.files-only #room-panel { justify-content: center; align-items: center; padding: 20px; }
@@ -87,8 +97,46 @@
         .msg-row { display: flex; flex-direction: column; max-width: 85%; }
         .msg-row.me { align-self: flex-end; align-items: flex-end; }
         .msg-row.peer { align-self: flex-start; align-items: flex-start; }
+ 
+        /* Update existing .msg-bubble to ensure relative positioning */
+        .msg-bubble { 
+            padding: 10px 14px; 
+            border-radius: 12px; 
+            font-size: 0.95rem; 
+            line-height: 1.4; 
+            word-wrap: break-word; 
+            position: relative; /* <--- CRITICAL */
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1); 
+            padding-right: 30px; /* <--- Make space for copy button */
+        }       
+
+        /* Add new rule for the copy button */
+        .msg-copy-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0, 0, 0, 0.15);
+            border: none;
+            border-radius: 4px;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            font-size: 0.75rem;
+            padding: 2px 5px;
+            transition: 0.2s;
+        }
         
-        .msg-bubble { padding: 10px 14px; border-radius: 12px; font-size: 0.95rem; line-height: 1.4; word-wrap: break-word; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+        .msg-copy-btn:hover {
+            background: rgba(0, 0, 0, 0.4);
+            color: white;
+        }
+        
+        /* Adjust color for 'Peer' messages (grey background) for better contrast */
+        .peer .msg-copy-btn {
+            color: #94a3b8;
+        }
+        .peer .msg-copy-btn:hover {
+            color: white;
+        }
         .me .msg-bubble { background: var(--me-bg); color: white; border-bottom-right-radius: 2px; }
         .peer .msg-bubble { background: var(--peer-bg); color: #e2e8f0; border-bottom-left-radius: 2px; }
         .sys-msg { align-self: center; background: rgba(255,255,255,0.1); color: #94a3b8; font-size: 0.75rem; padding: 4px 12px; border-radius: 20px; margin: 8px 0; }
@@ -104,7 +152,54 @@
         .file-progress-bar.paused { background: var(--warn); }
         .file-progress-bar.cancelled { background: var(--danger); }
         .file-stat-text { font-size: 0.75rem; margin-top: 4px; display: flex; justify-content: space-between; opacity: 0.8; }
+
+        /* Telemetry Grid & Graph */
+        .telemetry-grid { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr 1fr 1fr; 
+            gap: 4px; 
+            margin-top: 8px; font-size: 0.65rem; color: #cbd5e1; 
+        }
+        .tele-box { 
+            background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px; 
+            text-align: center; display: flex; flex-direction: column;
+        }
+        .tele-label { font-size: 0.55rem; color: #64748b; text-transform: uppercase; margin-bottom: 1px; }
+        .tele-val { font-weight: bold; font-family: monospace; }
         
+        /* Graph Styles */
+        .graph-container {
+            position: relative;
+            width: 100%;
+            height: 60px;
+            background: rgba(0,0,0,0.2);
+            border: 1px solid #334155;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+
+        /* SVG GRAPH */
+        .tele-graph { width: 100%; height: 100%; display: block; }
+        .graph-path {
+            stroke: var(--success);
+            stroke-width: 1.5;
+            fill: rgba(16, 185, 129, 0.15);
+            vector-effect: non-scaling-stroke; 
+        }
+
+        /* INTERACTIVE ELEMENTS */
+        .graph-cursor {
+            position: absolute; top: 0; bottom: 0; width: 1px;
+            background: rgba(255, 255, 255, 0.5); pointer-events: none; display: none; z-index: 10;
+        }
+        .graph-tooltip {
+            position: absolute; top: 5px; left: 5px;
+            background: rgba(15, 23, 42, 0.9); border: 1px solid #475569;
+            padding: 4px 8px; border-radius: 4px; font-size: 0.7rem; color: #fff;
+            pointer-events: none; display: none; z-index: 20; white-space: nowrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
         /* File Controls (Material) */
         .file-controls { display: flex; gap: 10px; margin-top: 10px; justify-content: flex-end; align-items: center; }
         .ctrl-btn { 
@@ -119,7 +214,13 @@
         .ctrl-btn.btn-cancel:hover { background: rgba(239,68,68,0.3); color: white; }
 
         /* Input Area */
-        #input-area { flex-shrink: 0; padding: 12px; background: var(--panel); border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; padding-bottom: max(12px, env(safe-area-inset-bottom)); position: relative; }
+        #input-area { 
+            flex-shrink: 0; padding: 12px; 
+            background: var(--panel); border-top: 1px solid var(--border); 
+            display: flex; gap: 10px; align-items: center; 
+            position: relative; 
+            padding-bottom: max(20px, env(safe-area-inset-bottom)); 
+        }
         input[type="text"] { flex: 1; padding: 12px 16px; border-radius: 24px; border: 1px solid #475569; background: #0f172a; color: white; font-size: 16px; }
         input[type="text"]:focus { border-color: var(--primary); }
 
@@ -143,24 +244,40 @@
         .modal-overlay.visible { display: flex; }
         .modal-card { background: var(--panel); width: 90%; max-width: 400px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column; max-height: 85vh; padding: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
         
+        /* BATCH MODAL */
+        #batch-list { overflow-y: auto; max-height: 40vh; margin: 10px 0; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 5px; }
+        .batch-item { display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .batch-item:last-child { border: none; }
+        .batch-info { flex: 1; font-size: 0.85rem; overflow: hidden; }
+        .batch-path { font-size: 0.7rem; color: #94a3b8; }
+
         /* ONBOARDING */
-        #onboarding-overlay { background: var(--bg); z-index: 9000; overflow-y: auto; display: none; 
-            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
-        }
+        #onboarding-overlay { background: var(--bg); z-index: 9000; overflow-y: auto; display: none; background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%); }
         #onboarding-overlay.visible { display: flex; align-items: center; justify-content: center; }
-        .ob-container { max-width: 800px; padding: 40px; text-align: center; }
-        .ob-logo { width: 120px; height: 120px; margin-bottom: 20px; }
-        .ob-title-main { font-size: 2.5rem; font-weight: 800; margin-bottom: 10px; background: linear-gradient(to right, #fff, #3b82f6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .ob-subtitle { font-size: 1.1rem; color: #94a3b8; margin-bottom: 40px; max-width: 600px; margin-left: auto; margin-right: auto; }
-        .ob-cards { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; margin-bottom: 40px; }
-        .ob-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 25px; border-radius: 16px; flex: 1 1 220px; max-width: 280px; text-align: center; transition: transform 0.2s; }
-        .ob-card:hover { transform: translateY(-5px); border-color: var(--primary); }
-        .ob-icon { font-size: 2.5rem; margin-bottom: 15px; }
-        .ob-card-title { font-weight: 700; margin-bottom: 8px; color: white; }
-        .ob-card-desc { font-size: 0.9rem; color: #cbd5e1; line-height: 1.5; }
-        .btn-ob { background: linear-gradient(135deg, var(--primary), #2563eb); padding: 16px 32px; font-size: 1.1rem; border-radius: 30px; box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.5); transition: transform 0.2s, box-shadow 0.2s; }
-        .btn-ob:hover { transform: translateY(-2px); box-shadow: 0 15px 30px -10px rgba(59, 130, 246, 0.6); }
-        
+        .ob-container { width: 100%; max-width: 525px; padding: 30px 25px; text-align: center; position: relative; display: flex; flex-direction: column; justify-content: space-between; background: #1e293b; border-radius: 20px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6); margin: auto; }
+        .ob-slide { display: none; animation: fadeIn 0.3s ease; flex: 1; flex-direction: column; align-items: center; height: 100%; }
+        #slide-4 { justify-content: flex-start; }
+        .ob-slide.active { display: flex; }
+        .ob-title-main { font-size: 2rem; margin: 10px 0; font-weight: 800; color: white; }
+        .ob-icon-large { font-size: 3.5rem; margin-bottom: 5px; display: inline-block; }
+        .ob-title-sub { font-size: 1.6rem; color: white; margin: 0 0 15px; }
+        .ob-subtitle { color: #94a3b8; font-size: 1rem; margin-bottom: 20px; }
+        .ob-text { color: #cbd5e1; font-size: 0.95rem; line-height: 1.6; }
+        .ob-feature-grid { display: flex; gap: 10px; justify-content: center; width: 100%; }
+        .ob-feat { background: rgba(255,255,255,0.1); padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; color: #cbd5e1; font-weight: bold; margin: 5px; }
+        .ob-instruction { text-align: left; background: rgba(255,255,255,0.05); padding: 16px; border-radius: 12px; border-left: 4px solid var(--primary); margin: 15px 0; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .step { font-size: 0.9rem; color: #e2e8f0; line-height: 1.5; }
+        .step strong { color: white; }
+        .ob-controls { margin-top: 20px; display: flex; flex-direction: column; gap: 20px; align-items: center; }
+        .ob-dots { display: flex; gap: 8px; }
+        .dot { width: 8px; height: 8px; background: #334155; border-radius: 50%; cursor: pointer; transition: 0.2s; }
+        .dot.active { background: var(--primary); width: 24px; border-radius: 10px; }
+        .ob-buttons { display: flex; width: 100%; justify-content: space-between; align-items: center; margin-top: 10px; }
+        .btn-text { background: none; border: none; color: #94a3b8; font-size: 0.95rem; font-weight: 500; padding: 10px; cursor: pointer; transition: color 0.2s; }
+        .btn-text:hover { color: white; }
+        .btn-ob { width: auto; padding: 10px 24px; min-width: 120px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } } 
+       
         /* DROP ZONE */
         #drop-zone { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(59, 130, 246, 0.8); z-index: 10000; display: none; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
         #drop-zone.active { display: flex; }
@@ -169,7 +286,19 @@
         /* CALL OVERLAY */
         #call-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 2000; display: none; flex-direction: column; }
         #call-overlay.visible { display: flex; }
-        #remote-video { flex: 1; width: 100%; height: 100%; object-fit: cover; }
+        /* Update this rule in your <style> block */
+        #remote-video { 
+            flex: 1; 
+            width: 100%; 
+            height: 100%; 
+            object-fit: contain; 
+            background: #000;
+            
+            /* NEW: needed for custom JS zoom to work smoothly */
+            touch-action: none; 
+            transform-origin: center center;
+            transition: transform 0.1s linear; /* Smoothness */
+        }
         #local-video { position: absolute; bottom: 100px; right: 20px; width: 100px; height: 150px; background: #333; border: 2px solid white; border-radius: 8px; object-fit: cover; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
         #call-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 20px; padding-bottom: env(safe-area-inset-bottom); }
         .call-btn { width: 60px; height: 60px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
@@ -188,9 +317,29 @@
         .loading-text { color: white; font-weight: 600; font-size: 1.1rem; letter-spacing: 0.5px; }
         .loading-sub { color: #94a3b8; font-size: 0.85rem; margin-top: 8px; text-align: center; max-width: 80%; }
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Default: Hide the hint on desktop */
+        .mobile-hint { display: none; }
+        
+        /* Mobile/Tablet: Show the hint */
+        @media (pointer: coarse) {
+            .mobile-hint {
+                display: block;
+                position: absolute; 
+                top: -25px; 
+                left: 0; 
+                right: 0; 
+                text-align: center; 
+                color: #64748b; 
+                font-size: 0.7rem; 
+                pointer-events: none;
+            }
+        }
     </style>
 </head>
 <body class="beginner-mode">
+
+<div id="toast-container"></div>
 
 <div id="drop-zone">
     <div class="drop-content">
@@ -205,6 +354,7 @@
     <video id="local-video" autoplay playsinline muted></video>
     <div id="call-controls">
         <button class="call-btn btn-mute" onclick="toggleMute()">🎤</button>
+        <button class="call-btn btn-sec" onclick="startScreenShare()">🖥️</button>
         <button class="call-btn btn-hangup" onclick="endCall()">❌</button>
     </div>
 </div>
@@ -217,54 +367,133 @@
 
 <div id="onboarding-overlay" class="modal-overlay">
     <div class="ob-container">
-        <svg class="ob-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
-            <defs>
-                <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
-                    <stop offset="100%" style="stop-color:#2563eb;stop-opacity:1" />
-                </linearGradient>
-            </defs>
-            <path fill="url(#grad1)" d="M100,10 C60,70 20,110 20,145 C20,185 55,215 100,215 C145,215 180,185 180,145 C180,110 140,70 100,10 Z M100,195 C65,195 40,170 40,145 C40,120 70,85 100,40 C130,85 160,120 160,145 C160,170 135,195 100,195 Z" />
-            <circle fill="#fff" cx="100" cy="145" r="35" opacity="0.9" />
-            <path fill="url(#grad1)" d="M100,125 L120,155 L80,155 Z" transform="rotate(180 100 145)"/>
-            <circle fill="url(#grad1)" cx="100" cy="120" r="8" />
-            <circle fill="url(#grad1)" cx="125" cy="160" r="8" />
-            <circle fill="url(#grad1)" cx="75" cy="160" r="8" />
-        </svg>
-        <h1 class="ob-title-main">Welcome to PeerDrop Web</h1>
-        <p class="ob-subtitle">Your secure, private, peer-to-peer file & chat bridge. No servers, no clouds, just you and them.</p>
         
-        <div class="ob-cards">
-            <div class="ob-card">
-                <div class="ob-icon">🚫☁️</div>
-                <div class="ob-card-title">NO INSTALL • NO CLOUD</div>
-                <div class="ob-card-desc">Direct Device-to-Device. Your data never touches a server.</div>
+        <div class="ob-slide active" id="slide-1">
+            <div class="ob-icon-large">⚡</div>
+            <h1 class="ob-title-main">PeerDrop Web</h1>
+            <p class="ob-subtitle">Direct Device-to-Device Transfer</p>
+            <div class="ob-text" style="max-width: 400px; margin: 0 auto;">
+                <p>A secure, private pipe between two devices.</p>
+                <p style="font-size: 0.9rem; color: #94a3b8; margin-top: 15px;">
+                    No servers. No installation. No middleman.<br>Just you and them.
+                </p>
             </div>
-            <div class="ob-card">
-                <div class="ob-icon">💬🔒</div>
-                <div class="ob-card-title">OFFLINE / LOCAL CHAT</div>
-                <div class="ob-card-desc">Chat securely on the same Wi-Fi or Hotspot.</div>
-            </div>
-            <div class="ob-card">
-                <div class="ob-icon">📁⚡</div>
-                <div class="ob-card-title">DIRECT FILE TRANSFER</div>
-                <div class="ob-card-desc">Send photos, videos, and docs directly. No compression.</div>
+            <div class="ob-feature-grid" style="margin-top:20px;">
+              <div>
+                <div class="ob-feat">📁 Files</div>
+                <div class="ob-feat">📹 Video</div>
+              </div>
+              <div>
+                <div class="ob-feat">💬 Chat</div>
+                <div class="ob-feat">🖥️ Screenshare</div>
+              </div>
             </div>
         </div>
-        
-        <button class="btn btn-ob" onclick="finishOnboarding()">Got it, let's start!</button>
+
+        <div class="ob-slide" id="slide-2">
+            <div class="ob-icon-large">🔗</div>
+            <h2 class="ob-title-sub">How to Connect</h2>
+            <p class="ob-subtitle" style="font-size:0.9rem; color:#fca5a5;">Requires a 2-Step Handshake!</p>
+            
+            <div class="ob-instruction" style="font-size: 0.9rem;">
+                <div class="step" style="margin-bottom: 15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+                    <strong>Option 1: Nearby (Camera) 📸</strong><br>
+                    <span style="color:#cbd5e1">1. <strong>Guest</strong> scans Host's QR.<br>
+                    2. Guest shows a new QR.<br>
+                    3. <strong>Host</strong> scans Guest's QR to finish.</span>
+                </div>
+                <div class="step">
+                    <strong>Option 2: Remote (Link/Text) 💬</strong><br>
+                    <span style="color:#cbd5e1">1. Host sends <strong>Link</strong> to Guest via messenger (WhatsApp/Signal).<br>
+                    2. Guest clicks Link which opens up PeerDrop Web on their device.<br>
+                    3. Guest copies the <strong>Answer Code</strong>.<br>
+                    4. Guest sends Code back to Host via messenger.<br>
+                    5. Host pastes Code to connect.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="ob-slide" id="slide-3">
+            <div class="ob-icon-large">🔒</div>
+            <h2 class="ob-title-sub">Privacy & Data</h2>
+            <div class="ob-text">
+                <p><strong>Everything is temporary.</strong></p>
+                <p>Data flies directly between devices. We cannot see your files, chats, or video.</p>
+                <div style="background:rgba(239, 68, 68, 0.1); border:1px solid #ef4444; padding:10px; border-radius:8px; margin-top:15px; font-size:0.85rem; color:#fca5a5;">
+                    ⚠️ <strong>Warning:</strong> Refreshing the page destroys the encryption keys. Chat history is not saved anywhere.
+                </div>
+            </div>
+        </div>
+
+        <div class="ob-slide" id="slide-4">
+            <div class="ob-icon-large">⚖️</div>
+            <h2 class="ob-title-sub">Real Talk</h2>
+            
+            <div class="ob-instruction" style="border-left-color: var(--warn); margin-bottom: 10px; overflow-y: auto; max-height: 300px;">
+                <div class="step">
+                    🤖 <strong>Chrome Mobile Tips</strong><br>
+                    <span style="font-size:0.8rem; color:#94a3b8">
+                        • Use <b>Split Screen</b> to drag & drop files.<br>
+                        • ⚠️ <b>Don't switch apps</b> for >20s. The connection <i>will</i> die and require a re-scan.
+                    </span>
+                </div>
+                
+                <div class="step" style="margin-top:10px;">
+                    🦊 <strong>Firefox Mobile</strong><br>
+                    <span style="font-size:0.8rem; color:#94a3b8">Drag & Drop is not supported (Browser Limitation).</span>
+                </div>
+
+                <div class="step" style="margin-top:10px;">
+                    🔌 <strong>Pure P2P = No Magic</strong><br>
+                    <span style="font-size:0.8rem; color:#94a3b8">
+                        Since there is no server, if the connection drops, you <b>must</b> do the 2-way handshake again. This is the price of privacy.
+                    </span>
+                </div>
+
+                <div class="step" style="margin-top:10px;">
+                    🍏 <strong>iPhone Limitations</strong><br>
+                    <span style="font-size:0.8rem; color:#94a3b8">iOS blocks outgoing Screen Sharing.</span>
+                </div>
+            </div>
+
+            <div style="margin-top: auto; padding-top: 15px; border-top: 1px solid #334155; text-align: left;">
+                <p style="font-size: 0.7rem; color: #64748b; line-height: 1.4; margin: 0;">
+                    <strong>LEGAL DISCLAIMER:</strong><br>
+                    Please use this software in strict accordance with the laws, rules, and regulations applicable in your region. The developers assume no liability for misuse.
+                </p>
+            </div>
+        </div>
+
+        <div class="ob-controls">
+            <div class="ob-dots">
+                <div class="dot active" onclick="gotoSlide(1)"></div>
+                <div class="dot" onclick="gotoSlide(2)"></div>
+                <div class="dot" onclick="gotoSlide(3)"></div>
+                <div class="dot" onclick="gotoSlide(4)"></div>
+            </div>
+            <div class="ob-buttons">
+                <button class="btn-text" onclick="closeOnboarding()">Skip</button>
+                <button id="btn-next" class="btn btn-ob" onclick="nextSlide()">Next</button>
+            </div>
+        </div>
     </div>
 </div>
 
-<div id="file-req-modal" class="modal-overlay">
-    <div class="modal-card" style="text-align: center;">
-        <div style="font-size: 3rem;">📁</div>
-        <h3 style="margin: 10px 0;">Incoming File</h3>
-        <div id="req-filename" style="color: var(--primary); font-weight: bold; margin-bottom: 5px; word-break: break-all;">image.png</div>
-        <div id="req-filesize" style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 20px;">2.5 MB</div>
-        <div style="display: flex; gap: 10px;">
-            <button class="btn btn-danger" onclick="rejectFile()">Reject</button>
-            <button class="btn btn-success" onclick="acceptFile()">Accept & Download</button>
+<div id="batch-modal" class="modal-overlay">
+    <div class="modal-card">
+        <h3>Incoming Files</h3>
+        <p style="color:#94a3b8; font-size:0.9rem;">The peer wants to send <span id="batch-count">0</span> files.</p>
+        
+        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+             <button class="btn-sm btn-sec" onclick="toggleBatchAll(true)">Select All</button>
+             <button class="btn-sm btn-sec" onclick="toggleBatchAll(false)">Deselect All</button>
+        </div>
+
+        <div id="batch-list"></div>
+        
+        <div style="display:flex; gap: 10px; margin-top:10px;">
+            <button class="btn btn-danger" onclick="rejectBatch()">Reject All</button>
+            <button class="btn btn-success" onclick="acceptBatch()">Accept Selected</button>
         </div>
     </div>
 </div>
@@ -287,10 +516,12 @@
     <div class="menu-section">Preferences</div>
     <button class="menu-item" onclick="toggleBeginnerMode()">Beginner Mode <span id="lbl-beginner" style="float:right; color:var(--success); font-weight:bold;">ON</span></button>
     <button class="menu-item" onclick="toggleSendFileMode()">Quick Mode: Send Files <span id="lbl-filemode" style="float:right; color:#64748b; font-size:0.8em">OFF</span></button>
+    
     <button class="menu-item" onclick="resetOnboarding()">Replay Tutorial</button>
     <button id="btn-install" class="menu-item hidden" onclick="installPWA()">📲 Install App</button>
     
     <div class="menu-section advanced-only">Network</div>
+    <button class="menu-item" onclick="restartConnection()">⚡ Reconnect (Fresh)</button>
     <button class="menu-item advanced-only" onclick="openNetworkConfig()">IP Config <span id="net-badge" style="float:right; color:var(--warn); font-size:0.8em; background:#334155; padding:2px 6px; border-radius:4px;">AUTO</span></button>
     <div class="menu-section advanced-only">Diagnostics</div>
     <button class="menu-item advanced-only" onclick="toggleDebug()">View Logs</button>
@@ -299,20 +530,7 @@
     <div class="menu-section">Session</div>
     <button class="menu-item" onclick="downloadTranscript()">Download Chat</button>
     <button class="menu-item" onclick="location.reload()" style="color:var(--danger)">Reset App</button>
-</div>
-
-<div id="ts-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.9); z-index:9999; align-items:center; justify-content:center; backdrop-filter:blur(5px);">
-    <div style="background:#1e293b; width:90%; max-width:380px; border-radius:16px; border:2px solid #ef4444; overflow:hidden; box-shadow:0 20px 50px rgba(0,0,0,0.5);">
-        <div style="background:rgba(239, 68, 68, 0.1); padding:20px; text-align:center; border-bottom:1px solid #334155;">
-            <div style="font-size:3rem; margin-bottom:10px;">⚠️</div>
-            <h2 style="color:#ef4444; margin:0; font-size:1.25rem;">Network Mismatch</h2>
-        </div>
-        <div style="padding:20px;">
-            <p style="color:#cbd5e1; font-size:0.95rem; line-height:1.5; text-align:center; margin-bottom:20px;">One device is on <strong>WiFi (IPv4)</strong> and the other on <strong>Mobile Data (IPv6)</strong>.</p>
-            <button class="btn" onclick="closeTroubleshooter()">I Fixed It - Try Again</button>
-            <button class="btn btn-sm btn-sec" style="margin-top:12px; background:none; color:#64748b; width:100%;" onclick="ignoreAndProceed()">Ignore &amp; Proceed</button>
-        </div>
-    </div>
+    <div>2026.01.17.iter.15.1</div>
 </div>
 
 <div id="net-modal" class="modal-overlay">
@@ -370,10 +588,15 @@
             
             <p id="qr-hint" style="color:#cbd5e1; font-size:0.9rem; margin:10px 0;"></p>
             
+            <div id="share-link-box" class="link-copy-box">
+                 <input type="text" id="share-link-input" readonly style="flex:1; background:#020617; color:#a5b4fc; border:1px solid #334155; border-radius:4px; padding:8px; font-size:0.8rem;">
+                 <button class="btn-sm" onclick="copyShareLink()">🔗 Copy Link</button>
+            </div>
+
             <div id="manual-display-area" class="manual-box hidden">
                 <label id="manual-display-label" class="manual-label">1. Copy this code:</label>
                 <textarea id="manual-share-text" class="sdp-text" readonly onclick="this.select()"></textarea>
-                <button class="btn-sm" onclick="navigator.clipboard.writeText(getEl('manual-share-text').value);alert('Copied!')">Copy to Clipboard</button>
+                <button class="btn-sm" onclick="copyManualText()">Copy to Clipboard</button>
                 
                 <div id="host-manual-answer" class="hidden">
                     <label class="manual-label" style="margin-top:10px;">2. Paste Guest Answer here:</label>
@@ -411,13 +634,29 @@
         </div>
     </div>
     <div id="input-area">
+        <div class="mobile-hint">
+            Tip: (Chrome): Use <b>Split Screen</b> and Drag and drop to transfer files
+        </div>
         <div id="attach-hint" class="tooltip-hint hidden">Tap to send files</div>
         <input type="file" id="file-input" class="hidden" multiple>
-        <div id="big-upload-btn" class="hidden" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="folder-input" class="hidden" webkitdirectory directory multiple>
+ 
+       <div id="big-upload-btn" class="hidden" 
+            onclick="isSelectingFile = true; document.getElementById('file-input').click()">       
             <div style="font-size:3rem; margin-bottom:10px;">📄</div>
             <span>Tap to Send File</span>
         </div>
-        <button id="btn-attach" class="btn-sm btn-sec" style="padding:10px 14px; font-size:1.2rem;" onclick="document.getElementById('file-input').click()">📎</button>
+        
+        <div style="display:flex; flex-direction:column; gap:5px;">
+            <button id="btn-attach" class="btn-sm btn-sec" style="padding:6px 10px; font-size:1rem;" 
+                onclick="isSelectingFile = true; document.getElementById('file-input').click()" 
+                title="Send Files">📄</button>
+            
+            <button id="btn-folder" class="btn-sm btn-sec" style="padding:6px 10px; font-size:1rem;" 
+                onclick="isSelectingFile = true; document.getElementById('folder-input').click()" 
+                title="Send Folder">📁</button>
+        </div>
+
         <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
         <button id="send-txt-btn" class="btn-sm" style="padding:10px 16px; border-radius:20px;" onclick="sendText()">➤</button>
     </div>
@@ -427,33 +666,148 @@
 
 <script>
     // --- STATE ---
-    let pc, dc, stream, keepAliveStream;
+    let pc, dc, stream, keepAliveStream, screenShareStream;
     let isHost = false, fileMeta = null, fileBuffer = [], receivedSize = 0;
     let logLevel = 'VERBOSE'; 
     let manualIPs = [], strictModeTargetIPs = [];
-    const CHUNK_SIZE = 16384; 
+    const CHUNK_SIZE = 256 * 1024; 
+    const MAX_BUFFER = 8 * 1024 * 1024;
+    const BUFFER_THRESHOLD = 1024 * 1024;
     let fileQueue = [];
     let pendingFileReq = null;
     let callStream = null;
     let wakeLock = null;
     let deferredPrompt = null;
+    let pendingBatch = null; 
+    let batchDirHandle = null; 
+    let heartbeatInterval = null; // New Keep-Alive
+    let disconnectTimer = null;
+    let isSelectingFile = false;
+
+    // --- ONBOARDING LOGIC ---
+    let currentSlide = 1;
+    const totalSlides = 4;
 
     // TRANSFER STATE
     let activeTransfer = null; 
-    let transferState = 'idle'; // idle, active, paused, cancelled
+    let transferState = 'idle'; 
+
+    // Global state for speed calculation
+    let lastDumpTime = 0;
+    let lastSent = 0;
+    let lastRecv = 0;
+
+    // --- ZOOM & PAN LOGIC FOR MOBILE (Fixed) ---
+    let zoomState = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 };
+    let lastDist = 0;
+    let lastTap = 0;
+    let isGesture = false; // Tracks if we are pinching/panning vs just tapping
+    let tapStartX = 0, tapStartY = 0;
 
     // --- UI HELPERS ---
     const getEl = (id) => document.getElementById(id);
     const toggleMenu = () => getEl('main-menu').classList.toggle('visible');
 
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/peerdrop-web/sw.js', {
-            scope: '/peerdrop-web/'
-        });
+
+    // --- HELPER FUNCTION ---
+    function sanitizeId(id) {
+        return String(id).replace('.', '_');
     }
-    
+
+ 
+    function setupZoom() {
+        const el = getEl('remote-video');
+        if(!el) return;
+
+        // Reset
+        zoomState = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 };
+        el.style.transform = `translate(0px, 0px) scale(1)`;
+
+        el.ontouchstart = (e) => {
+            // 1. Always reset gesture flag on new touch
+            if (e.touches.length === 1) {
+                isGesture = false; 
+                tapStartX = e.touches[0].clientX;
+                tapStartY = e.touches[0].clientY;
+            }
+
+            if (e.touches.length === 2) {
+                // Multi-touch = definitely a gesture (pinch), not a tap
+                isGesture = true; 
+                zoomState.panning = false;
+                lastDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            } else if (e.touches.length === 1) {
+                // Possible pan start
+                zoomState.startX = e.touches[0].clientX - zoomState.pointX;
+                zoomState.startY = e.touches[0].clientY - zoomState.pointY;
+            }
+        };
+
+        el.ontouchmove = (e) => {
+            if (e.touches.length === 2) {
+                // PINCH
+                isGesture = true; 
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                
+                const diff = dist - lastDist;
+                const speed = 0.005;
+                let newScale = zoomState.scale + diff * speed;
+                newScale = Math.max(1, Math.min(newScale, 5));
+                
+                zoomState.scale = newScale;
+                lastDist = dist;
+                updateTransform(el);
+
+            } else if (e.touches.length === 1 && zoomState.scale > 1) {
+                // PAN
+                isGesture = true;
+                e.preventDefault(); 
+                zoomState.pointX = e.touches[0].clientX - zoomState.startX;
+                zoomState.pointY = e.touches[0].clientY - zoomState.startY;
+                updateTransform(el);
+            } else if (e.touches.length === 1) {
+                // Check for "micro moves" to disqualify taps
+                // (If you move your finger > 10px, it's not a tap anymore)
+                if (Math.abs(e.touches[0].clientX - tapStartX) > 10 ||
+                    Math.abs(e.touches[0].clientY - tapStartY) > 10) {
+                    isGesture = true;
+                }
+            }
+        };
+        
+        el.ontouchend = (e) => {
+            // 1. If fingers are still on screen (e.g. lifting 1 of 2), ignore.
+            if (e.touches.length > 0) return;
+
+            // 2. If we were pinching/panning, this lift is the end of a gesture, NOT a tap.
+            if (isGesture) {
+                isGesture = false;
+                return;
+            }
+
+            // 3. Double Tap Logic (Only runs if no gesture happened)
+            const curTime = new Date().getTime();
+            const tapLen = curTime - lastTap;
+            if (tapLen < 300 && tapLen > 0) {
+                zoomState = { scale: 1, panning: false, pointX: 0, pointY: 0, startX: 0, startY: 0 };
+                updateTransform(el);
+            }
+            lastTap = curTime;
+        };
+    }
+
+    function updateTransform(el) {
+        el.style.transform = `translate(${zoomState.pointX}px, ${zoomState.pointY}px) scale(${zoomState.scale})`;
+    }
+   
     function initApp() {
-        if (!localStorage.getItem('skipIntro')) getEl('onboarding-overlay').classList.add('visible');
+        if (!localStorage.getItem('skipIntroV2')) getEl('onboarding-overlay').classList.add('visible');
         const beginner = localStorage.getItem('beginnerMode') !== 'false';
         if(beginner) document.body.classList.add('beginner-mode');
         else {
@@ -462,14 +816,41 @@
             getEl('lbl-beginner').style.color = '#64748b';
         }
         
-        // Share Target Handler
+        // --- FIX: Handle Android Viewport/Keyboard Resizing ---
+        if (window.visualViewport) {
+            const resizeHandler = () => {
+                const h = window.visualViewport.height;
+                document.body.style.height = `${h}px`;
+                const hist = getEl('chat-history');
+                if(hist) hist.scrollTop = hist.scrollHeight;
+            };
+            window.visualViewport.addEventListener('resize', resizeHandler);
+            resizeHandler(); 
+        }
+        // -----------------------------------------------------
+
+        if(window.location.hash && window.location.hash.length > 5) {
+             const hash = window.location.hash.substring(1);
+             if(hash.startsWith('p1-')) {
+                 const raw = hash.replace('p1-', '');
+                 try {
+                     const data = LZString.decompressFromEncodedURIComponent(raw);
+                     if(data) {
+                         log("Found URL Handshake data", 'INFO');
+                         finishOnboarding();
+                         initReceiver(data); 
+                         window.location.hash = ""; 
+                     } else { showToast("Invalid Link"); }
+                 } catch(e) { showToast("Link Corrupted"); }
+             }
+        }
+
         const params = new URLSearchParams(window.location.search);
         if(params.has('text')) {
             getEl('msg-input').value = params.get('text');
-            finishOnboarding(); // Skip intro if sharing
+            finishOnboarding(); 
         }
 
-        // Install Prompt Listener
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e;
@@ -482,9 +863,19 @@
         document.body.addEventListener('drop', (e) => {
             e.preventDefault();
             getEl('drop-zone').classList.remove('active');
-            if(e.dataTransfer.files.length && dc && dc.readyState === 'open') handleFiles(e.dataTransfer.files);
-            else if (e.dataTransfer.files.length) alert("Connect to a peer first!");
+            if(e.dataTransfer.files.length && dc && dc.readyState === 'open') handleFiles(e.dataTransfer.files); 
+            else if(e.dataTransfer.items.length && dc) handleItems(e.dataTransfer.items); 
+            else if (e.dataTransfer.files.length) showToast("Connect to a peer first!");
         });
+    }
+
+    function showToast(msg) {
+        const c = getEl('toast-container');
+        const t = document.createElement('div'); t.className = 'toast';
+        t.innerHTML = `<span class="toast-icon">ℹ️</span> ${msg}`;
+        c.appendChild(t);
+        requestAnimationFrame(()=>t.classList.add('show'));
+        setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(), 300); }, 3000);
     }
     
     async function installPWA() {
@@ -498,33 +889,97 @@
 
     function vibe(pattern) { if(navigator.vibrate) navigator.vibrate(pattern); }
 
-    // --- MANUAL MODE TOGGLING ---
     function toggleManualMode(mode) {
         if(mode === 'display') {
-            getEl('manual-display-area').classList.toggle('hidden');
+            const area = getEl('manual-display-area');
+            const isHidden = area.classList.contains('hidden');
+            area.classList.toggle('hidden');
             getEl('qr-container').classList.toggle('hidden');
+            if (isHost) {
+                if (isHidden) { 
+                    getEl('host-manual-answer').classList.remove('hidden');
+                    getEl('btn-scan-answer').classList.add('hidden');
+                } else {
+                    if (keepAliveStream && keepAliveStream.getVideoTracks().length > 0) {
+                        getEl('btn-scan-answer').classList.remove('hidden');
+                    }
+                }
+            }
         } else {
             getEl('guest-manual-area').classList.toggle('hidden');
             getEl('video').classList.toggle('hidden');
-            if(stream) stream.getTracks().forEach(t=>t.stop());
         }
     }
-
+    
     async function handleManualOffer() {
-        const text = getEl('guest-sdp-in').value.trim();
+        let text = getEl('guest-sdp-in').value.trim();
         if(!text) return;
+        if(!text.includes(' ')) {
+             const decomp = LZString.decompressFromEncodedURIComponent(text);
+             if(decomp) text = decomp;
+        }
         await handleScan(text); 
     }
 
     async function handleManualAnswer() {
-        const text = getEl('host-sdp-in').value.trim();
+        let text = getEl('host-sdp-in').value.trim();
         if(!text) return;
+        if(!text.includes(' ')) {
+             const decomp = LZString.decompressFromEncodedURIComponent(text);
+             if(decomp) text = decomp;
+        }
         await handleScan(text);
     }
     
-    // --- STANDARD APP LOGIC ---
-    function finishOnboarding() { localStorage.setItem('skipIntro', 'true'); getEl('onboarding-overlay').classList.remove('visible'); }
-    function resetOnboarding() { localStorage.removeItem('skipIntro'); location.reload(); }
+    function copyManualText() {
+        const val = getEl('manual-share-text').value;
+        navigator.clipboard.writeText(val).then(()=>showToast("Copied!"));
+    }
+
+    function showSlide(n) {
+        document.querySelectorAll('.ob-slide').forEach(s => s.classList.remove('active'));
+        document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+        const target = getEl(`slide-${n}`);
+        if(target) target.classList.add('active');
+        const dots = document.querySelectorAll('.dot');
+        if(dots.length >= n) dots[n-1].classList.add('active');
+        const btn = getEl('btn-next');
+        if (n === totalSlides) {
+            btn.innerText = "Understood ✅";
+            btn.onclick = finishOnboarding;
+        } else {
+            btn.innerText = "Next";
+            btn.onclick = nextSlide;
+        }
+    }
+
+    function nextSlide() {
+        if (currentSlide < totalSlides) {
+            currentSlide++;
+            showSlide(currentSlide);
+        }
+    }
+    
+    function gotoSlide(n) {
+        currentSlide = n;
+        showSlide(n);
+    }
+
+    // Hides the overlay but does NOT save to localStorage
+    // (User will see it again next time they reload)
+    function closeOnboarding() {
+        getEl('onboarding-overlay').classList.remove('visible'); 
+        setTimeout(() => { currentSlide = 1; showSlide(1); }, 500);
+    }
+
+    // Marks tutorial as seen permanently
+    function finishOnboarding() { 
+        localStorage.setItem('skipIntroV2', 'true'); 
+        closeOnboarding();
+    }    
+
+    function resetOnboarding() { localStorage.removeItem('skipIntroV2'); location.reload(); }
+    
     function toggleBeginnerMode() {
         document.body.classList.toggle('beginner-mode');
         const active = document.body.classList.contains('beginner-mode');
@@ -533,6 +988,7 @@
         localStorage.setItem('beginnerMode', active);
         toggleMenu(); 
     }
+    
     function toggleSendFileMode() {
         document.body.classList.toggle('files-only');
         const active = document.body.classList.contains('files-only');
@@ -549,6 +1005,119 @@
         } catch(err) { log("WakeLock Error: " + err, 'VERBOSE'); }
     }
 
+    async function logConnectionDetails() {
+        if (!pc) return;
+        try {
+            const stats = await pc.getStats();
+            let activePair = null;
+
+            // 1. Find the active transport pair
+            stats.forEach(report => {
+                if (report.type === 'transport' && report.selectedCandidatePairId) {
+                    activePair = stats.get(report.selectedCandidatePairId);
+                }
+            });
+
+            // 2. Fallback: Search candidate-pairs directly (for older browsers)
+            if (!activePair) {
+                stats.forEach(report => {
+                    if (report.type === 'candidate-pair' && (report.selected || report.state === 'succeeded')) {
+                        activePair = report;
+                    }
+                });
+            }
+
+            // 3. Extract and Log
+            if (activePair) {
+                const local = stats.get(activePair.localCandidateId);
+                const remote = stats.get(activePair.remoteCandidateId);
+
+                if (local && remote) {
+                    const lIP = local.ip || local.address || '[Hidden]';
+                    const rIP = remote.ip || remote.address || '[Hidden]';
+                    const lType = local.candidateType; // 'host' = LAN, 'srflx' = WAN
+                    const rType = remote.candidateType;
+                    const proto = local.protocol ? local.protocol.toUpperCase() : 'UDP';
+
+                    log(`🔗 LINK: ${proto} | ${lType} <-> ${rType}`, 'SUCCESS');
+                    log(`   Local:  ${lIP}:${local.port}`, 'VERBOSE');
+                    log(`   Remote: ${rIP}:${remote.port}`, 'VERBOSE');
+                    
+                    if(rType === 'srflx' || rType === 'relay') {
+                        log("⚠️ Connection is via Internet (WAN)", 'WARN');
+                    } else if (rType === 'host' && lType === 'host') {
+                         log("✅ Connection is Local (LAN)", 'SUCCESS');
+                    }
+                }
+            }
+        } catch (e) { log("Stats Error: " + e, 'ERR'); }
+    }
+
+    async function dumpStats() {
+        if (!pc) { log("No active connection.", 'WARN'); return; }
+        
+        const now = Date.now();
+        log("--- DIAGNOSTIC DUMP ---", 'INFO');
+
+        try {
+            const stats = await pc.getStats();
+            
+            // 1. Link Details (IPs, Ports, Protocol)
+            await logConnectionDetails();
+
+            stats.forEach(report => {
+                
+                // 2. Active Path Health (Latency & Bandwidth)
+                if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                    // Latency
+                    const rtt = report.currentRoundTripTime ? (report.currentRoundTripTime * 1000).toFixed(0) : '0';
+                    const avgRtt = report.totalRoundTripTime ? (report.totalRoundTripTime * 1000 / (report.responsesReceived || 1)).toFixed(0) : '?';
+                    log(`📶 Latency: ${rtt} ms (Avg: ${avgRtt} ms)`, 'VERBOSE');
+                    
+                    // Bandwidth Estimation (Available capacity)
+                    if (report.availableOutgoingBitrate) {
+                        const bw = (report.availableOutgoingBitrate / 1000000).toFixed(1);
+                        log(`🛣️ Est. Bandwidth: ${bw} Mbps`, 'VERBOSE');
+                    }
+                }
+                
+                // 3. Data Channel Metrics (Throughput & Totals)
+                if (report.type === 'data-channel') {
+                    // Speed Calculation
+                    const timeDiff = (now - lastDumpTime) / 1000; // Seconds
+                    const sentDiff = report.bytesSent - lastSent;
+                    const recvDiff = report.bytesReceived - lastRecv;
+                    
+                    if (lastDumpTime > 0 && timeDiff > 0) {
+                        const uploadSpeed = (sentDiff / timeDiff / (1024*1024)).toFixed(2);
+                        const downloadSpeed = (recvDiff / timeDiff / (1024*1024)).toFixed(2);
+                        
+                        if (parseFloat(uploadSpeed) > 0.01) log(`🚀 UP Speed:   ${uploadSpeed} MB/s`, 'SUCCESS');
+                        if (parseFloat(downloadSpeed) > 0.01) log(`📥 DOWN Speed: ${downloadSpeed} MB/s`, 'SUCCESS');
+                    }
+
+                    // Total Traffic
+                    const totalSent = (report.bytesSent / (1024*1024)).toFixed(1);
+                    const totalRecv = (report.bytesReceived / (1024*1024)).toFixed(1);
+                    log(`📊 Traffic: ${totalSent} MB Sent | ${totalRecv} MB Recv`, 'VERBOSE');
+                    log(`📨 Messages: ${report.messagesSent} Sent | ${report.messagesReceived} Recv`, 'VERBOSE');
+
+                    // Update State
+                    lastSent = report.bytesSent;
+                    lastRecv = report.bytesReceived;
+                }
+            });
+            
+            lastDumpTime = now;
+            
+            log("Full raw stats object logged to Browser Console.", 'INFO');
+            console.group("WebRTC Stats Dump");
+            stats.forEach(r => console.log(r));
+            console.groupEnd();
+
+        } catch (e) { log("Stats Error: " + e, 'ERR'); }
+    }
+
     function showLoading(msg, hint = "Please check your browser permission prompts") {
         document.getElementById('loading-msg').innerText = msg;
         document.getElementById('loading-hint').innerText = hint;
@@ -557,7 +1126,7 @@
     function hideLoading() { document.getElementById('loading-overlay').classList.remove('visible'); }
     function toggleDebug() { getEl('debug-panel').classList.toggle('visible'); getEl('main-menu').classList.remove('visible'); }
     function cycleLogLevel() { logLevel = logLevel === 'INFO' ? 'VERBOSE' : 'INFO'; getEl('lbl-loglevel').innerText = logLevel; }
-    function copyLogs() { navigator.clipboard.writeText(getEl('debug-content').innerText).then(() => alert("Logs copied to clipboard")); }
+    function copyLogs() { navigator.clipboard.writeText(getEl('debug-content').innerText).then(() => showToast("Logs copied to clipboard")); }
     async function openNetworkConfig() {
         toggleMenu(); getEl('net-modal').classList.add('visible');
         getEl('ip-list').innerHTML = '<div style="padding:20px;text-align:center;color:#aaa">Scanning Network Interfaces...</div>';
@@ -599,46 +1168,226 @@
     }
 
     // --- CORE INIT ---
-    async function initHost() {
-        isHost = true;
-        getEl('role-select').classList.add('hidden');
-        showLoading("Initializing Host...", "Allow Camera Permissions");
+
+    async function acquireMediaForIPs() {
         try {
+            log("Requesting Camera...", 'VERBOSE');
             keepAliveStream = await navigator.mediaDevices.getUserMedia({ video: true });
             getEl('hidden-video').srcObject = keepAliveStream;
-            const ips = await gatherLocalIPs(); window.myLocalIPs = ips; 
-            log(`Host IPs detected: [${ips.join(', ')}]`, 'SUCCESS');
-            hideLoading(); setupConnection();
-        } catch(e) {
-            hideLoading(); alert("Camera failed. Switching to Manual Mode.");
-            log("Camera Init Failed: " + e, 'ERR');
-            setupConnection(); toggleManualMode('display'); 
+            return true;
+        } catch (videoErr) {
+            log("Camera failed: " + videoErr.name, 'WARN');
+            try {
+                showToast("Camera failed. Using Microphone for connection.");
+                keepAliveStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                keepAliveStream.getAudioTracks()[0].enabled = false; 
+                return true;
+            } catch (audioErr) {
+                log("No media permissions obtained.", 'ERR');
+                return false;
+            }
         }
     }
 
-    async function initReceiver() {
+    async function initHost() {
+        isHost = true;
+        getEl('role-select').classList.add('hidden');
+        showLoading("Initializing Host...", "Allow Permissions if prompted");
+        await acquireMediaForIPs();
+        try {
+            const ips = await gatherLocalIPs(); 
+            window.myLocalIPs = ips; 
+            log(`Host IPs: [${ips.join(', ')}]`, 'SUCCESS');
+        } catch(e) { log("IP Scan Error", 'ERR'); }
+        hideLoading(); 
+        setupConnection();
+    }
+
+     async function initReceiver(prefilledData = null) {
         isHost = false;
         getEl('role-select').classList.add('hidden');
+        
+        if (!prefilledData) {
+             showLoading("Initializing Guest...", "Allow Permissions if prompted");
+             await acquireMediaForIPs();
+        }
+        
         log("Initializing GUEST...", 'INFO');
-        try { const ips = await gatherLocalIPs(); window.myLocalIPs = ips; log(`Guest IPs detected: [${ips.join(', ')}]`, 'SUCCESS'); setupConnection(); } catch(e) { setupConnection(); }
+        try { 
+            const ips = await gatherLocalIPs(); 
+            window.myLocalIPs = ips; 
+            log(`Guest IPs: [${ips.join(', ')}]`, 'SUCCESS'); 
+        } catch(e) {}
+        
+        hideLoading();
+        setupConnection();
+        
+        if(prefilledData) {
+            handleScan(prefilledData);
+        } else {
+            // Check if we actually have a working video track
+            if(keepAliveStream && keepAliveStream.getVideoTracks().length > 0) {
+                 startScanner();
+            } else {
+                 // Fallback: Camera missing/denied -> Force Manual Mode UI
+                 log("No camera detected. Forcing Manual Mode.", 'WARN');
+                 
+                 // 1. Unhide the parent container (Crucial Fix)
+                 getEl('step-scan').classList.remove('hidden');
+                 
+                 // 2. Show the Manual Input Area
+                 getEl('guest-manual-area').classList.remove('hidden');
+                 
+                 // 3. Hide the Video and the "Switch to Manual" link
+                 getEl('video').classList.add('hidden');
+                 getEl('guest-manual-link').classList.add('hidden');
+            }
+        }
     }
 
     function setupConnection() {
         pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], iceCandidatePoolSize: 2 });
+        
         pc.oniceconnectionstatechange = () => {
-            const s = pc.iceConnectionState; updateStatus(s);
+            const s = pc.iceConnectionState; 
+            updateStatus(s); 
             log(`ICE State: ${s}`, 'INFO');
-            if (s === 'connected') { log("Connection Established.", 'SUCCESS'); toggleWakeLock(true); vibe([100, 50, 100]); }
-            if(s === 'failed' || s === 'closed') handleEnd();
+            
+            if (s === 'connected') { 
+                // RECOVERY SUCCESSFUL
+                if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
+
+                const existingBtn = document.getElementById('reconnect-msg');
+                if (existingBtn) existingBtn.remove();
+
+                log("Connection Established.", 'SUCCESS'); 
+                toggleWakeLock(true); 
+                vibe([100, 50, 100]); 
+                if(heartbeatInterval) clearInterval(heartbeatInterval);
+                heartbeatInterval = setInterval(sendHeartbeat, 5000); 
+            }
+            else if (s === 'disconnected') {
+                let msg = "Connection Unstable";
+                
+                // If the user was just picking a file, give them a specific reason
+                if (isSelectingFile) {
+                    msg = "Timeout during file selection (Files Saved)";
+                }
+
+                if (disconnectTimer) clearTimeout(disconnectTimer);
+                disconnectTimer = setTimeout(() => {
+                    log("Connection unstable. Showing manual option.", 'WARN');
+                    showReconnectUI(msg); 
+                }, 4000);
+            }
+            else if (s === 'failed' || s === 'closed') {
+                // DEAD
+                if (disconnectTimer) clearTimeout(disconnectTimer);
+                handleEnd(); 
+            }
         };
+
         pc.ondatachannel = (e) => { log("Data Channel Received", 'VERBOSE'); setupDC(e.channel); }
         pc.onicecandidate = (e) => { if(e.candidate) log(`Gathered: ${e.candidate.candidate.trim()}`, 'VERBOSE'); };
+        
+        // --- CORRECTED SECTION ---
         pc.ontrack = (e) => {
             log("Track Received", 'VERBOSE');
             const rv = getEl('remote-video');
-            if(rv.srcObject !== e.streams[0]) { rv.srcObject = e.streams[0]; getEl('call-overlay').classList.add('visible'); vibe([500, 200, 500]); }
+            if(rv.srcObject !== e.streams[0]) { 
+                rv.srcObject = e.streams[0]; 
+                getEl('call-overlay').classList.add('visible'); 
+                vibe([500, 200, 500]); // Restored!
+            }
         };
-        if (isHost) { log("Creating Data Channel", 'VERBOSE'); const dc = pc.createDataChannel("chat", { ordered: true }); setupDC(dc); createOffer(); } else { startScanner(); }
+        // -------------------------
+
+        if (isHost) { 
+            const dc = pc.createDataChannel("chat", { ordered: true }); 
+            setupDC(dc); 
+            createOffer(); 
+        } 
+    }
+   
+    // --- NEW: HEARTBEAT (Keep-Alive) ---
+    function sendHeartbeat() {
+        if(dc && dc.readyState === 'open') {
+             // Only send if not actively sending file to save bandwidth
+             if(!activeTransfer || activeTransfer.paused) {
+                 dc.send(JSON.stringify({ type: 'ping' }));
+             }
+        }
+    }
+    // -----------------------------------
+
+
+    async function restartConnection() {
+        log("Resetting Connection...", 'WARN');
+        
+        // --- NEW: STATE PRESERVATION LOGIC ---
+        // If we were sending a file, save it back to the queue
+        if (activeTransfer && activeTransfer.file) {
+            log(`Preserving active transfer: ${activeTransfer.name}`, 'INFO');
+            
+            // Reconstruct the queue item
+            const preservedItem = {
+                id: activeTransfer.id,
+                name: activeTransfer.name,
+                size: activeTransfer.size,
+                path: activeTransfer.path || activeTransfer.name,
+                fileObj: activeTransfer.file
+            };
+            
+            // Push to FRONT of queue to be retried first
+            fileQueue.unshift(preservedItem);
+            
+            // Clear active state so we don't try to "resume" on a dead connection
+            activeTransfer = null;
+        }
+        // -------------------------------------
+        
+        // 1. UI Cleanup
+        if(getEl('main-menu').classList.contains('visible')) toggleMenu();
+        
+        getEl('room-panel').classList.add('hidden');
+        getEl('setup-panel').classList.remove('hidden');
+        
+        // Reset manual/scanner UI
+        getEl('step-qr').classList.add('hidden');
+        getEl('step-scan').classList.add('hidden');
+        getEl('manual-display-area').classList.add('hidden');
+        getEl('host-manual-answer').classList.add('hidden');
+        getEl('guest-manual-area').classList.add('hidden');
+        getEl('qr-container').classList.remove('hidden');
+
+        // 2. Destroy old connection
+        if (pc) {
+            pc.oniceconnectionstatechange = null;
+            pc.close();
+            pc = null;
+        }
+        if (dc) {
+            dc.onclose = null;
+            dc.close();
+            dc = null;
+        }
+        
+        // 3. Re-acquire Media
+        await acquireMediaForIPs();
+
+        // 4. Update Network IPs
+        try {
+            const ips = await gatherLocalIPs();
+            window.myLocalIPs = ips; 
+        } catch(e) {}
+
+        // 5. Initialize Fresh Connection
+        setupConnection(); 
+
+        if (!isHost) {
+            startScanner();
+            showToast("Scan the Host's new QR Code");
+        }
     }
 
     async function createOffer() {
@@ -650,51 +1399,176 @@
     }
 
     async function waitForGathering() {
-        return new Promise(r => {
-            if(pc.iceGatheringState === 'complete') r();
-            else { const t = setTimeout(() => { log("Gathering Timeout", 'WARN'); r(); }, 2500); pc.onicegatheringstatechange = () => { if(pc.iceGatheringState === 'complete') { clearTimeout(t); r(); }}; }
+        return new Promise(resolve => {
+            if (pc.iceGatheringState === 'complete') { resolve(); return; }
+            const checkState = () => {
+                if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                }
+            };
+            pc.addEventListener('icegatheringstatechange', checkState);
+            setTimeout(() => {
+                if(pc.iceGatheringState !== 'complete') {
+                    log("Gathering Timeout (proceeding anyway)", 'WARN');
+                    pc.removeEventListener('icegatheringstatechange', checkState);
+                    resolve();
+                }
+            }, 2000);
         });
     }
 
     function compressSDP(sdp) {
-        const u = sdp.match(/a=ice-ufrag:(.*)/)[1].trim(); const p = sdp.match(/a=ice-pwd:(.*)/)[1].trim(); const f = sdp.match(/a=fingerprint:(.*)/)[1].trim();
+        const u = sdp.match(/a=ice-ufrag:(.*)/)[1].trim(); 
+        const p = sdp.match(/a=ice-pwd:(.*)/)[1].trim(); 
+        const f = sdp.match(/a=fingerprint:(.*)/)[1].trim();
+        
+        // 1. Parse into objects
         let cands = [...sdp.matchAll(/a=candidate:(.*)/g)].map(m => {
-            const part = m[1].split(' '); return { raw: m[1], ip: part[4], port: part[5], proto: part[2].toLowerCase(), type: part[7] };
+            const part = m[1].split(' '); 
+            return { raw: m[1], ip: part[4], port: part[5], proto: part[2].toLowerCase(), type: part[7] };
         });
-        cands.forEach(c => { c.score = 10; if(c.ip.match(/^192\.168\.|^10\.|^172\./)) c.score = 1; else if(c.ip.includes(':')) c.score = 2; });
-        cands.sort((a,b) => a.score - b.score);
-        const best = [...new Set(cands.map(c => `${c.ip}:${c.port}:${c.proto}`))].slice(0, 4); 
+
+        // 2. The Diversity Buckets
+        const buckets = {
+            v4: [],      // Standard LAN (192.168.x.x)
+            v6: [],      // Modern LAN (2401:...)
+            tcp: [],     // Reliable Fallback (The fix for jitter)
+            public: []   // WAN Backup
+        };
+
+        // 3. Sort candidates
+        cands.forEach(c => {
+            if (c.proto === 'tcp') {
+                buckets.tcp.push(c);
+            } else if (c.type === 'srflx') {
+                buckets.public.push(c);
+            } else if (c.ip.includes(':')) {
+                buckets.v6.push(c);
+            } else if (c.ip.match(/^192\.168\.|^10\.|^172\./)) {
+                buckets.v4.push(c);
+            }
+        });
+
+        // 4. Draft the "Dream Team" (1 from each bucket)
+        const selected = [];
+
+        // Order matters slightly for initial check, but ICE checks all eventually.
+        if (buckets.v4.length > 0) selected.push(buckets.v4[0]);
+        if (buckets.v6.length > 0) selected.push(buckets.v6[0]);
+        if (buckets.tcp.length > 0) selected.push(buckets.tcp[0]);
+        if (buckets.public.length > 0) selected.push(buckets.public[0]);
+
+        // 5. Fill any empty slots with leftovers (e.g. if no IPv6, add another IPv4)
+        const leftovers = [
+            ...buckets.v4.slice(1), 
+            ...buckets.v6.slice(1), 
+            ...buckets.tcp.slice(1),
+            ...buckets.public.slice(1)
+        ];
+
+        let i = 0;
+        while (selected.length < 4 && i < leftovers.length) {
+            selected.push(leftovers[i++]);
+        }
+
+        // 6. Generate String
+        const best = selected.map(c => `${c.ip}:${c.port}:${c.proto}`);
         return `${manualIPs.length>0?'!':''}${u}|${p}|${f}|${best.join('~')}`;
+    }
+
+    function decompressSDP(essence, type) {
+         let payload = essence; 
+         if (payload.startsWith('!')) payload = payload.substring(1);
+         
+         const [u, p, f, candStr] = payload.split('|');
+         const cleanF = f.replace(/sha-256 /i, "").trim();
+         const role = type === 'offer' ? 'actpass' : 'active';
+         
+         let sdp = `v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=msid-semantic: WMS\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ice-ufrag:${u}\r\na=ice-pwd:${p}\r\na=fingerprint:sha-256 ${cleanF}\r\na=setup:${role}\r\na=mid:0\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n`;
+         
+         if(candStr) {
+            candStr.split('~').forEach(c => {
+                const parts = c.split(':'); 
+                let ip, port, proto;
+                
+                // Handle 3-part (IP:Port:Proto) or 2-part legacy formats
+                if(parts.length === 3) { [ip, port, proto] = parts; } 
+                else { proto = parts.pop(); port = parts.pop(); ip = parts.join(':'); }
+                
+                // Standard Priority Calculation (RFC 5245)
+                // We do NOT force values here anymore. We let Chrome decide.
+                let prio;
+                if (proto.toLowerCase() === 'tcp') {
+                    prio = 1518280447; // Local TCP
+                } else if (ip.match(/^192\.168\.|^10\.|^172\.|:/)) {
+                    prio = 2122260223; // Local UDP (v4 or v6)
+                } else {
+                    prio = 1686052607; // Public UDP
+                }
+
+                const tcpExtra = proto.toLowerCase() === 'tcp' ? ' tcptype passive' : '';
+                sdp += `a=candidate:0 1 ${proto} ${prio} ${ip} ${port} typ host${tcpExtra}\r\n`;
+            });
+         }
+         sdp += "a=end-of-candidates\r\n"; 
+         return sdp;
     }
 
     function showQR(sdp, type) {
         const compressed = compressSDP(sdp);
         const data = (type === 'offer' ? 'O' : 'A') + compressed;
-        log(`Showing QR (${type})`, 'INFO');
         
+        const lzData = LZString.compressToEncodedURIComponent(data);
+        const url = window.location.origin + window.location.pathname + '#p1-' + lzData;
+        getEl('share-link-input').value = url;
+
+        getEl('qrcode').innerHTML = "";
+        new QRCode(getEl('qrcode'), { text: data, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.L });
+        
+        getEl('manual-share-text').value = lzData; 
+
+        log(`Showing QR (${type})`, 'INFO');
         getEl('step-qr').classList.remove('hidden');
         getEl('step-scan').classList.add('hidden'); 
-        getEl('qrcode').innerHTML = "";
-        
-        getEl('manual-share-text').value = data; 
-        new QRCode(getEl('qrcode'), { text: data, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.L });
         
         if(isHost) {
             getEl('qr-hint').innerText = "Scan on Guest Device";
-            getEl('manual-display-label').innerText = "1. Copy this code & send to Guest:";
-            getEl('btn-scan-answer').classList.remove('hidden');
-            if(!getEl('manual-display-area').classList.contains('hidden')) getEl('host-manual-answer').classList.remove('hidden');
+            getEl('manual-display-label').innerText = "1. Copy Code or Link to Guest:";
+            
+            // FIX: Check stream validity to ensure button appears during re-handshake
+            const hasCamera = keepAliveStream && keepAliveStream.getVideoTracks().length > 0;
+            
+            if (hasCamera) {
+                getEl('btn-scan-answer').classList.remove('hidden');
+                // Only show manual answer box if manual mode was explicitly toggled ON
+                if(!getEl('manual-display-area').classList.contains('hidden')) {
+                    getEl('host-manual-answer').classList.remove('hidden');
+                } else {
+                    getEl('host-manual-answer').classList.add('hidden');
+                }
+            } else {
+                // Fallback if camera failed
+                getEl('btn-scan-answer').classList.add('hidden'); 
+                getEl('manual-display-area').classList.remove('hidden'); 
+                getEl('host-manual-answer').classList.remove('hidden');  
+                getEl('qr-container').classList.remove('hidden'); 
+            }
         } else {
             getEl('qr-hint').innerText = "Scan on Host Device";
-            getEl('manual-display-label').innerText = "2. Copy this code & send to Host:";
+            getEl('manual-display-label').innerText = "2. Copy Answer to Host:";
             getEl('btn-scan-answer').classList.add('hidden');
             getEl('host-manual-answer').classList.add('hidden'); 
-            
-            if(!getEl('guest-manual-area').classList.contains('hidden')) {
-                getEl('manual-display-area').classList.remove('hidden');
-                getEl('qr-container').classList.add('hidden');
-            }
+            getEl('manual-display-area').classList.remove('hidden');
+            getEl('qr-container').classList.remove('hidden');
+            getEl('share-link-box').classList.add('hidden');
         }
+    }
+
+    function copyShareLink() {
+        const i = getEl('share-link-input');
+        i.select(); i.setSelectionRange(0, 99999);
+        navigator.clipboard.writeText(i.value).then(()=>showToast("Link Copied!"));
     }
 
     async function startScanner() {
@@ -709,7 +1583,7 @@
             log("Scanner Active", 'INFO');
         } catch(e) { 
             hideLoading();
-            alert("Camera access denied or failed. Switching to Manual Mode.");
+            showToast("Camera access denied or failed. Switching to Manual Mode.");
             log("Scanner Failed: " + e, 'ERR');
             getEl('step-qr').classList.add('hidden');
             getEl('step-scan').classList.remove('hidden');
@@ -748,27 +1622,12 @@
                 await waitForGathering();
                 hideLoading();
                 showQR(pc.localDescription.sdp, "answer");
+            } else {
+                hideLoading();
             }
-        } catch(e) { log("Handshake Error: " + e, 'ERR'); }
+        } catch(e) { log("Handshake Error: " + e, 'ERR'); hideLoading(); showToast("Invalid Code"); }
     }
     
-    function decompressSDP(essence, type) {
-         let payload = essence; if (payload.startsWith('!')) payload = payload.substring(1);
-         const [u, p, f, candStr] = payload.split('|');
-         const cleanF = f.replace(/sha-256 /i, "").trim();
-         const role = type === 'offer' ? 'actpass' : 'active';
-         let sdp = `v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\na=msid-semantic: WMS\r\na=group:BUNDLE 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\na=rtcp-mux\r\na=ice-ufrag:${u}\r\na=ice-pwd:${p}\r\na=fingerprint:sha-256 ${cleanF}\r\na=setup:${role}\r\na=mid:0\r\na=sctp-port:5000\r\na=max-message-size:262144\r\n`;
-         if(candStr) {
-            candStr.split('~').forEach(c => {
-                const parts = c.split(':'); let ip, port, proto;
-                if(parts.length === 3) { [ip, port, proto] = parts; } else { proto = parts.pop(); port = parts.pop(); ip = parts.join(':'); }
-                let prio = ip.match(/^192\.|^10\./) ? 2122260223 : 1686052607;
-                sdp += `a=candidate:0 1 ${proto} ${prio} ${ip} ${port} typ host\r\n`;
-            });
-         }
-         sdp += "a=end-of-candidates\r\n"; return sdp;
-    }
-
     // --- UI/UX ---
     function updateStatus(s) {
         const dot = getEl('status-dot'); const txt = getEl('status-text');
@@ -779,58 +1638,540 @@
 
     function setupDC(c) {
         dc = c;
+        
+        // --- FIX: Event-Driven Backpressure (No Throttling) ---
+        dc.bufferedAmountLowThreshold = BUFFER_THRESHOLD; 
+        dc.onbufferedamountlow = () => {
+            if (activeTransfer && !activeTransfer.paused) transferLoop();
+        };
+
         dc.onopen = () => {
             log("Data Channel OPEN", 'SUCCESS');
             getEl('setup-panel').classList.add('hidden'); getEl('room-panel').classList.remove('hidden');
             getEl('btn-leave').classList.remove('hidden'); getEl('btn-call').classList.remove('hidden');
             addSysMsg("Secure Connection Established."); hideLoading();
             if(!localStorage.getItem('sawHint')) { getEl('attach-hint').classList.remove('hidden'); setTimeout(() => { getEl('attach-hint').classList.add('hidden'); localStorage.setItem('sawHint', 'true'); }, 5000); }
+
+            // --- NEW: AUTOMATIC RE-OFFER LOGIC ---
+            // If we have files waiting in the queue (preserved from previous session),
+            // offer them to the new peer immediately.
+            if (fileQueue.length > 0) {
+                log(`Restoring queue of ${fileQueue.length} files...`, 'INFO');
+                
+                // Sanitize manifest (remove file objects before sending JSON)
+                const manifest = fileQueue.map(f => ({
+                    id: f.id,
+                    name: f.name,
+                    size: f.size,
+                    path: f.path
+                }));
+                
+                // Send the offer
+                dc.send(JSON.stringify({ type: 'batch-offer', manifest: manifest }));
+                
+                // Notify User
+                addSysMsg(`Re-offering ${fileQueue.length} pending files...`);
+            }
+            // -------------------------------------
+
+            // --- FIX: Resume Logic (Zombie Check & Auto-Request) ---
+            if (activeTransfer) {
+                // A. I am Receiver: Request missing data
+                if (!activeTransfer.file && receivedSize > 0 && receivedSize < activeTransfer.size) {
+                    log(`Requesting Resume from byte ${receivedSize}`, 'INFO');
+                    addSysMsg(`Resuming transfer...`);
+                    dc.send(JSON.stringify({ type: 'file-resume-request', id: activeTransfer.id, offset: receivedSize }));
+                }
+                
+                // B. I am Sender: Check for "Zombie" state (Finished but ACK lost)
+                else if (activeTransfer.file && activeTransfer.paused && activeTransfer.offset >= activeTransfer.size) {
+                    log("Recovering lost ACK for completed transfer", 'SUCCESS');
+                    updateTransferControls(activeTransfer.id, 'finished');
+                    updateProgressBar(activeTransfer.id, 100, activeTransfer.size, activeTransfer.size);
+                    activeTransfer = null;
+                    addSysMsg("Transfer confirmed complete.");
+                    if(fileQueue.length > 0) { fileQueue.shift(); processQueue(); }
+                }
+            }
+            // -------------------------------------------------------
         };
         dc.onclose = handleEnd; dc.onmessage = handleMsg;
     }
-    function handleEnd() { hideLoading(); updateStatus('disconnected'); addSysMsg("Session Ended."); toggleWakeLock(false); log("Session Ended", 'WARN'); }
+
+    function handleEnd() { 
+        hideLoading(); 
+        updateStatus('disconnected'); 
+        
+        // STOP everything (Hard Failure)
+        if(heartbeatInterval) clearInterval(heartbeatInterval);
+
+        if (activeTransfer) {
+            activeTransfer.paused = true;
+            updateTransferControls(activeTransfer.id, 'paused');
+            addSysMsg("Transfer paused due to network failure.");
+        } 
+
+        // Show the button indicating total failure
+        showReconnectUI("Connection Failed.");
+        log("Session Ended/Interrupted", 'WARN'); 
+    }
+
+     async function reviveConnection() {
+         if (!dc || dc.readyState !== 'open') return;
+     
+         log("Attempting to revive connection...", 'WARN');
+         
+         // 1. Force a check by sending data
+         // We send 3 quick pings to ensure the networking stack wakes up 
+         // and sends a STUN binding request immediately.
+         try {
+             dc.send(JSON.stringify({ type: 'ping' }));
+             setTimeout(() => dc.send(JSON.stringify({ type: 'ping' })), 100);
+             setTimeout(() => dc.send(JSON.stringify({ type: 'ping' })), 500);
+         } catch(e) { console.error(e); }
+     
+         // 2. (Optional) Re-apply configuration to nudge the ICE agent
+         // In some browsers, this acts as a "soft reset" for the candidate pairs
+         try {
+             if(pc && pc.signalingState === 'stable') {
+                 await pc.setConfiguration(pc.getConfiguration());
+             }
+         } catch(e) {}
+     }
+
+    function showReconnectUI(msgText) {
+        // Prevent duplicate buttons
+        if (document.getElementById('reconnect-msg')) return;
+
+        const h = getEl('chat-history');
+        const d = document.createElement('div');
+        d.id = 'reconnect-msg'; 
+        d.className = 'sys-msg';
+        d.style.background = 'rgba(239, 68, 68, 0.2)'; 
+        d.style.border = '1px solid var(--danger)';
+        d.innerHTML = `
+            <span>⚠️ ${msgText}</span> 
+            <button class="btn-sm" style="margin-left:10px; background:var(--primary); border:none; color:white; padding:6px 12px; border-radius:4px; cursor:pointer;" onclick="restartConnection()">
+                Reconnect Fresh ↻
+            </button>`;
+        h.appendChild(d);
+        h.scrollTop = h.scrollHeight;
+        vibe([200, 100, 200]);
+    }
+
     function confirmLeave() { if(confirm("Leave?")) { if(pc) pc.close(); location.reload(); } }
 
-    // --- QUEUE & CONTROLS ---
+    // --- BATCH & FOLDER HANDLING ---
+    async function handleItems(items) {
+        const files = [];
+        for (let i = 0; i < items.length; i++) {
+             const entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : items[i];
+             if (entry) await traverseFileTree(entry, "", files);
+        }
+        if(files.length) startBatchOffer(files);
+    }
+    
+    async function traverseFileTree(item, path, files) {
+        if (item.isFile) {
+            const file = await new Promise(r => item.file(r));
+            file.fullPath = path + file.name;
+            files.push(file);
+        } else if (item.isDirectory) {
+            const dirReader = item.createReader();
+            const entries = await new Promise(r => dirReader.readEntries(r));
+            for (let i = 0; i < entries.length; i++) {
+                await traverseFileTree(entries[i], path + item.name + "/", files);
+            }
+        }
+    }
+
     function handleFiles(files) {
         if(!dc || dc.readyState !== 'open') return;
-        for(let i=0; i<files.length; i++) fileQueue.push(files[i]);
-        processQueue();
+        const fileArr = Array.from(files);
+        startBatchOffer(fileArr);
     }
+    
+    async function startBatchOffer(files) {
+        let totalSize = 0;
+        const manifest = files.map(f => {
+            totalSize += f.size; 
+            return {
+                id: Date.now() + Math.random(),
+                name: f.name,
+                size: f.size,
+                path: f.fullPath || f.name,
+                fileObj: f
+            };
+        });
 
+        fileQueue.push(...manifest);
+        log(`Offering Batch: ${files.length} files (${(totalSize/1024/1024).toFixed(1)} MB)`, 'INFO');
+        const safeManifest = manifest.map(({fileObj, ...rest}) => rest);
+        dc.send(JSON.stringify({ type: 'batch-offer', manifest: safeManifest }));
+        addSysMsg(`Offering ${files.length} files...`);
+    }
+    
     function processQueue() {
         if(activeTransfer || fileQueue.length === 0) return;
+        const item = fileQueue[0];
+        if (item.fileObj) startSendingFile(item);
+    }
+ 
+    function startSendingFile(item) {
+        const file = item.fileObj; 
         
-        const file = fileQueue[0]; 
-        const id = Date.now();
-        activeTransfer = { id: id, file: file, offset: 0, paused: false };
+        activeTransfer = { 
+            id: item.id, 
+            file: file, 
+            size: file.size,
+            offset: 0, 
+            paused: false,
+            isReading: false, 
+            startTime: Date.now(),
+            lastSampleTime: Date.now(),
+            lastSampleBytes: 0,
+            maxSpeed: 0,
+            byteHistory: [],
+            graphHistory: new Array(24).fill(0),
+            uiTimer: setInterval(() => {
+                if(activeTransfer && !activeTransfer.paused) {
+                    // Determine total size (use activeTransfer.size)
+                    const pct = Math.floor((activeTransfer.offset / activeTransfer.size) * 100);
+                    updateProgressBar(activeTransfer.id, pct, activeTransfer.offset, activeTransfer.size);
+                }
+            }, 250)
+        };
+        
         transferState = 'active'; 
-        
-        log(`Queueing File: ${file.name}`, 'INFO');
-        dc.send(JSON.stringify({ type: 'file-offer', name: file.name, size: file.size, id: id }));
-        addSysMsg(`Offering: ${file.name} (Waiting...)`);
+        log(`Starting Send: ${file.name}`, 'INFO');
+        dc.send(JSON.stringify({ type: 'file-start', id: item.id, name: item.name, size: item.size, path: item.path }));
+        renderProgressMsg(item.name, item.id, 'me');
+    }   
+
+    // --- MESSAGING ---
+
+    async function handleMsg(e) {
+        const data = e.data;
+        if (typeof data === 'string') {
+            try {
+                const msg = JSON.parse(data);
+                if (msg.type === 'ping') { return; } // Ignore Heartbeats
+                else if (msg.type === 'chat') { renderMsg(msg.text, 'peer'); vibe(100); } 
+                else if (msg.type === 'batch-offer') {
+                    pendingBatch = msg.manifest;
+                    showBatchModal();
+                }
+                else if (msg.type === 'batch-response') {
+                    const allowedIds = msg.acceptedIds;
+                    fileQueue = fileQueue.filter(f => allowedIds.includes(f.id));
+                    if(fileQueue.length === 0) addSysMsg("All files declined.");
+                    else processQueue();
+                }
+                else if (msg.type === 'file-start') {
+                    await prepareDownload(msg);
+                }
+                else if (msg.type === 'file-ack') {
+                     transferLoop();
+                }
+                else if (msg.type === 'file-saved') {
+                     log("Peer saved file", 'SUCCESS');
+                     if(activeTransfer && activeTransfer.uiTimer) {
+                         clearInterval(activeTransfer.uiTimer);
+                         activeTransfer.uiTimer = null;
+                     }
+                     activeTransfer = null;
+                     fileQueue.shift(); 
+                     vibe(100);
+                     processQueue(); 
+                }
+                else if (msg.type === 'file-pause') {
+                    if(activeTransfer && activeTransfer.id === msg.id) activeTransfer.paused = true;
+                    updateTransferControls(msg.id, 'paused');
+                }
+                else if (msg.type === 'file-resume') {
+                    if(activeTransfer && activeTransfer.id === msg.id) {
+                        activeTransfer.paused = false;
+                        if(activeTransfer.file) transferLoop();
+                    }
+                    updateTransferControls(msg.id, 'active');
+                }
+                else if (msg.type === 'file-cancel') {
+                    if(activeTransfer && activeTransfer.id === msg.id) {
+                         if(activeTransfer.writable) activeTransfer.writable.abort().catch(()=>{});
+                         activeTransfer = null; 
+                         fileQueue.shift(); processQueue();
+                    } 
+                    updateTransferControls(msg.id, 'cancelled');
+                    addSysMsg("Peer Cancelled Transfer.");
+                }
+                // --- FIX: Handle Resume Request ---
+                else if (msg.type === 'file-resume-request') {
+                    if (activeTransfer && activeTransfer.id === msg.id) {
+                        log(`Peer requested resume from ${msg.offset}`, 'INFO');
+                        activeTransfer.offset = msg.offset;
+                        activeTransfer.paused = false;
+                        updateTransferControls(msg.id, 'active');
+                        transferLoop();
+                        addSysMsg("Resuming Transfer...");
+                    }
+                }
+                
+                else if (msg.type === 'call-offer') { handleCallOffer(msg.sdp); }
+                else if (msg.type === 'call-answer') { handleCallAnswer(msg.sdp); }
+                else if (msg.type === 'call-reject') { addSysMsg("Call Rejected by Peer."); endCall(false); vibe([50, 50, 50]); }
+                else if (msg.type === 'call-end') { endCall(false); }
+            } catch(err) { log("Msg Parse Error: " + err, 'ERR'); }
+        } else {
+            // BINARY DATA
+            if (!activeTransfer) return;
+            
+            try {
+                if (activeTransfer.writable) {
+                    await activeTransfer.writable.write(data);
+                    receivedSize += data.byteLength;
+                } else {
+                    fileBuffer.push(data); 
+                    receivedSize += data.byteLength;
+                }
+                
+                if (receivedSize >= activeTransfer.size) {
+                    log("File Download Complete", 'SUCCESS');
+
+                    // Stop the timer
+                    if(activeTransfer.uiTimer) { 
+                        clearInterval(activeTransfer.uiTimer); 
+                        activeTransfer.uiTimer = null; 
+                    }
+ 
+                    if (activeTransfer.writable) {
+                        try {
+                            await activeTransfer.writable.close(); 
+                        } catch (err) {
+                            if (err.name !== 'TypeError') console.error(err);
+                        }
+                        if (activeTransfer.isOPFS) {
+                            const file = await activeTransfer.fileHandle.getFile();
+                            const url = URL.createObjectURL(file);
+                            renderDownload(url, activeTransfer.name, file.type, true); 
+                            addSysMsg(`Ready to Save: ${activeTransfer.name}`);
+                        } else {
+                            addSysMsg(`Saved ${activeTransfer.name}`);
+                        }
+
+                    } else {
+                        const blob = new Blob(fileBuffer, { type: getMimeType(activeTransfer.name) });
+                        const url = URL.createObjectURL(blob);
+                        renderDownload(url, activeTransfer.name, blob.type, false);
+                        addSysMsg(`Received ${activeTransfer.name}`); 
+                        fileBuffer = [];
+                    }                   
+                    
+                    updateProgressBar(activeTransfer.id, 100, activeTransfer.size, activeTransfer.size);
+                    updateTransferControls(activeTransfer.id, 'finished'); 
+                    vibe(500); 
+                    
+                    dc.send(JSON.stringify({ type: 'file-saved', id: activeTransfer.id }));
+                    
+                    activeTransfer = null; 
+                    receivedSize = 0;
+                    log("File Download Complete", 'SUCCESS');
+                }
+            } catch(e) {
+                log("Write Error: " + e, 'ERR');
+            }
+        }
+    }
+    
+    // --- BATCH MODAL UI ---
+    function showBatchModal() {
+        const list = getEl('batch-list'); list.innerHTML = "";
+        getEl('batch-count').innerText = pendingBatch.length;
+        pendingBatch.forEach(f => {
+            const div = document.createElement('div'); div.className = 'batch-item';
+            div.innerHTML = `<input type="checkbox" checked value="${f.id}" class="batch-chk">
+                <div class="batch-info">
+                    <div style="font-weight:bold">${f.name}</div>
+                    <div class="batch-path">${f.path} • ${(f.size/1024/1024).toFixed(1)} MB</div>
+                </div>`;
+            list.appendChild(div);
+        });
+        getEl('batch-modal').classList.add('visible');
+    }
+    
+    function toggleBatchAll(checked) {
+        document.querySelectorAll('.batch-chk').forEach(c => c.checked = checked);
+    }
+    
+    function rejectBatch() {
+        getEl('batch-modal').classList.remove('visible');
+        dc.send(JSON.stringify({ type: 'batch-response', acceptedIds: [] }));
+        pendingBatch = null;
+    }
+    
+    async function acceptBatch() {
+        getEl('batch-modal').classList.remove('visible');
+        if(window.showDirectoryPicker) {
+            try {
+                if(confirm("Choose a folder to save these files?")) {
+                    batchDirHandle = await window.showDirectoryPicker();
+                    log("Batch Folder Selected", 'SUCCESS');
+                }
+            } catch(e) { log("Folder pick cancelled", 'WARN'); }
+        }
+        const accepted = Array.from(document.querySelectorAll('.batch-chk:checked')).map(c => parseFloat(c.value));
+        dc.send(JSON.stringify({ type: 'batch-response', acceptedIds: accepted }));
+        pendingBatch = null;
     }
 
+    // --- TRANSFER LOGIC ---
+    async function prepareDownload(msg) {
+        activeTransfer = { 
+            id: msg.id, 
+            name: msg.name, 
+            size: msg.size, 
+            path: msg.path,
+            paused: false,
+            startTime: Date.now(),
+            
+            // NEW: Initialize History Arrays for Graph/Speed
+            byteHistory: [], 
+            graphHistory: new Array(24).fill(0), 
+            
+            // NEW: UI Timer (250ms / 4fps)
+            // This ensures the receiver UI updates smoothly without blocking the download
+            uiTimer: setInterval(() => {
+                if(activeTransfer && !activeTransfer.paused && activeTransfer.size > 0) {
+                    // Start progress at 0 if receivedSize is undefined
+                    const current = typeof receivedSize !== 'undefined' ? receivedSize : 0;
+                    const pct = Math.floor((current / activeTransfer.size) * 100);
+                    updateProgressBar(activeTransfer.id, pct, current, activeTransfer.size);
+                }
+            }, 250)
+        };
+        
+        receivedSize = 0;
+        transferState = 'active';
+        renderProgressMsg(msg.name, msg.id, 'peer');
+
+        if (batchDirHandle) {
+             try {
+                const handle = await batchDirHandle.getFileHandle(msg.name, { create: true });
+                const writable = await handle.createWritable();
+                activeTransfer.writable = writable;
+                activeTransfer.fileHandle = handle;
+                log("Using Batch Folder", 'SUCCESS');
+             } catch(err) { log("Batch write failed, fallback", 'ERR'); }
+        } 
+        
+        if (!activeTransfer.writable && window.showSaveFilePicker) {
+            try {
+                const handle = await window.showSaveFilePicker({ suggestedName: msg.name });
+                const writable = await handle.createWritable();
+                activeTransfer.writable = writable;
+                activeTransfer.fileHandle = handle;
+            } catch (err) { log("User cancelled save or FS API failed.", 'WARN'); }
+        } 
+
+        if (!activeTransfer.writable && navigator.storage && navigator.storage.getDirectory) {
+            try {
+                const root = await navigator.storage.getDirectory();
+                const handle = await root.getFileHandle(`temp-${msg.id}-${msg.name}`, { create: true });
+                const writable = await handle.createWritable();
+                activeTransfer.writable = writable;
+                activeTransfer.fileHandle = handle;
+                activeTransfer.isOPFS = true; 
+                log("Using OPFS (Large File Support)", 'INFO');
+            } catch(err) { log("OPFS failed (Private Mode?): " + err, 'WARN'); }
+        }
+        
+        if(!activeTransfer.writable) {
+            const systemRAM = (navigator.deviceMemory || 4) * 1024 * 1024 * 1024; 
+            const threshold = Math.min(systemRAM * 0.5, 2 * 1024 * 1024 * 1024); 
+
+            if (activeTransfer.size > threshold) {
+                const sizeGB = (activeTransfer.size / (1024*1024*1024)).toFixed(2);
+                const msg = `⚠️ MEMORY WARNING ⚠️\n\nFile size (${sizeGB} GB) is large and disk access is unavailable.\nPrivate Browsing mode may be active.\nContinuing may crash the browser tab.\nProceed?`;
+                if (!confirm(msg)) {
+                    log("User cancelled download due to RAM warning", 'INFO');
+                    cancelTransfer(activeTransfer.id);
+                    return;
+                }
+            }
+            fileBuffer = []; 
+            log("Using RAM (Size limit applies)", 'WARN');
+        }
+        
+        dc.send(JSON.stringify({ type: 'file-ack', id: msg.id }));
+    }
+
+    // Sender Loop
+    async function transferLoop() {
+        // 1. Basic Validations
+        if (!dc || dc.readyState !== 'open' || !activeTransfer || activeTransfer.paused) return;
+    
+        // 2. Concurrency Guard
+        if (activeTransfer.isReading) return;
+        activeTransfer.isReading = true;
+    
+        const file = activeTransfer.file;
+    
+        try {
+            // 3. The Pump Loop
+            while (activeTransfer.offset < file.size) {
+                
+                if (activeTransfer.paused) break;
+    
+                // HIGH WATER MARK CHECK
+                // If we hit 8MB, stop and let it drain.
+                // Because BUFFER_THRESHOLD is 1MB, we will wake up much sooner than before.
+                if (dc.bufferedAmount > MAX_BUFFER) {
+                    activeTransfer.isReading = false;
+                    return; 
+                }
+    
+                // 4. Slice & Send
+                const chunkBlob = file.slice(activeTransfer.offset, activeTransfer.offset + CHUNK_SIZE);
+                const buffer = await chunkBlob.arrayBuffer();
+    
+                if (dc.readyState !== 'open') throw new Error("Connection lost");
+    
+                dc.send(buffer);
+                activeTransfer.offset += buffer.byteLength;
+    
+                // NOTE: We do NOT call updateProgressBar here anymore. 
+                // The uiTimer in startSendingFile handles it.
+            }
+    
+            activeTransfer.isReading = false;
+    
+            // EOF Handling
+            if (activeTransfer.offset >= file.size) {
+                log("File Sent (Wait for ACK)", 'INFO');
+                if(activeTransfer.uiTimer) { clearInterval(activeTransfer.uiTimer); activeTransfer.uiTimer = null; }
+                updateProgressBar(activeTransfer.id, 100, file.size, file.size);
+            }
+    
+        } catch (e) {
+            log("Transfer Error: " + e, 'ERR');
+            activeTransfer.isReading = false;
+            if(activeTransfer.uiTimer) { clearInterval(activeTransfer.uiTimer); activeTransfer.uiTimer = null; }
+        }
+    }
+    
     function toggleTransfer(id) {
         if(transferState === 'active') {
-            // PAUSE
             log("Pausing Transfer...", 'INFO');
             if(activeTransfer && activeTransfer.id === id) { 
                 activeTransfer.paused = true; 
-                dc.send(JSON.stringify({ type: 'file-pause', id: id })); // Notify Peer!
-            } else { 
                 dc.send(JSON.stringify({ type: 'file-pause', id: id })); 
             }
             updateTransferControls(id, 'paused');
         } else if(transferState === 'paused') {
-            // RESUME
             log("Resuming Transfer...", 'INFO');
             if(activeTransfer && activeTransfer.id === id) { 
                 activeTransfer.paused = false; 
-                dc.send(JSON.stringify({ type: 'file-resume', id: id })); // Notify Peer!
-                transferLoop(); 
-            } else { 
                 dc.send(JSON.stringify({ type: 'file-resume', id: id })); 
+                if(activeTransfer.file) transferLoop(); 
             }
             updateTransferControls(id, 'active');
         }
@@ -839,228 +2180,404 @@
     function cancelTransfer(id) {
         log("Cancelling Transfer...", 'WARN');
         if(activeTransfer && activeTransfer.id === id) { 
+            if(activeTransfer && activeTransfer.uiTimer) {
+                clearInterval(activeTransfer.uiTimer);
+                activeTransfer.uiTimer = null;
+            }
+            if(activeTransfer.writable) activeTransfer.writable.abort().catch(()=>{});
             activeTransfer = null; 
             dc.send(JSON.stringify({ type: 'file-cancel', id: id }));
             updateTransferControls(id, 'cancelled');
             fileQueue.shift(); processQueue();
-        } else if (fileMeta && fileMeta.id === id) {
-             dc.send(JSON.stringify({ type: 'file-cancel', id: id }));
-             fileMeta = null; fileBuffer = [];
-             updateTransferControls(id, 'cancelled');
-             addSysMsg("Download Cancelled.");
         }
     }
 
-    function handleMsg(e) {
-        const data = e.data;
-        if (typeof data === 'string') {
-            try {
-                const msg = JSON.parse(data);
-                if (msg.type === 'chat') { renderMsg(msg.text, 'peer'); vibe(100); } 
-                else if (msg.type === 'file-offer') { pendingFileReq = msg; showFileAcceptModal(msg); vibe(200); }
-                else if (msg.type === 'file-accept') { log("File Accepted", 'SUCCESS'); startTransfer(); }
-                else if (msg.type === 'file-reject') { 
-                    addSysMsg("File declined."); 
-                    activeTransfer = null; 
-                    fileQueue.shift(); processQueue(); 
-                    vibe([50, 50, 50]); 
-                }
-                else if (msg.type === 'file-pause') {
-                    log("Remote Pause Received", 'INFO');
-                    if(activeTransfer && activeTransfer.id === msg.id) activeTransfer.paused = true;
-                    updateTransferControls(msg.id, 'paused');
-                }
-                else if (msg.type === 'file-resume') {
-                    log("Remote Resume Received", 'INFO');
-                    if(activeTransfer && activeTransfer.id === msg.id) {
-                        activeTransfer.paused = false;
-                        transferLoop();
-                    }
-                    updateTransferControls(msg.id, 'active');
-                }
-                else if (msg.type === 'file-cancel') {
-                    log("Remote Cancel Received", 'WARN');
-                    if(activeTransfer && activeTransfer.id === msg.id) {
-                         activeTransfer = null; fileQueue.shift(); processQueue();
-                    } else if (fileMeta && fileMeta.id === msg.id) {
-                        fileMeta = null; fileBuffer = [];
-                    }
-                    updateTransferControls(msg.id, 'cancelled');
-                    addSysMsg("Peer Cancelled Transfer.");
-                }
-                else if (msg.type === 'call-offer') { handleCallOffer(msg.sdp); }
-                else if (msg.type === 'call-answer') { handleCallAnswer(msg.sdp); }
-                else if (msg.type === 'call-reject') { addSysMsg("Call Rejected by Peer."); endCall(false); vibe([50, 50, 50]); }
-                else if (msg.type === 'call-end') { endCall(false); }
-            } catch(err) { log("Msg Parse Error: " + err, 'ERR'); }
-        } else {
-            if (!fileMeta) return;
-            fileBuffer.push(data); receivedSize += data.byteLength;
-            const pct = Math.floor((receivedSize / fileMeta.size) * 100);
-            updateProgressBar(fileMeta.id, pct, receivedSize, fileMeta.size);
-            if (receivedSize >= fileMeta.size) {
-                log("File Download Complete", 'SUCCESS');
-                const blob = new Blob(fileBuffer, { type: getMimeType(fileMeta.name) });
-                const url = URL.createObjectURL(blob);
-                updateProgressBar(fileMeta.id, 100, fileMeta.size, fileMeta.size);
-                updateTransferControls(fileMeta.id, 'finished'); 
-                renderDownload(url, fileMeta.name, blob.type);
-                addSysMsg(`Received ${fileMeta.name}`); vibe(500); fileMeta = null; fileBuffer = [];
-            }
-        }
-    }
+    const handleFileSelect = (e) => {
+        // 1. Immediately kick the connection before processing
+        reviveConnection();
+        
+        // 2. Process the files
+        if(e.target.files.length) handleFiles(e.target.files); 
+        e.target.value = ''; 
+    };
     
-    getEl('file-input').addEventListener('change', (e) => { if(e.target.files.length) handleFiles(e.target.files); e.target.value = ''; });
-    function showFileAcceptModal(msg) { getEl('req-filename').innerText = msg.name; getEl('req-filesize').innerText = (msg.size / (1024*1024)).toFixed(2) + " MB"; getEl('file-req-modal').classList.add('visible'); }
-    function rejectFile() { getEl('file-req-modal').classList.remove('visible'); dc.send(JSON.stringify({ type: 'file-reject' })); pendingFileReq = null; }
-    
-    function acceptFile() { 
-        getEl('file-req-modal').classList.remove('visible'); 
-        if(!pendingFileReq) return; 
-        fileMeta = pendingFileReq; 
-        fileBuffer = []; 
-        receivedSize = 0; 
-        renderProgressMsg(fileMeta.name, fileMeta.id, 'peer'); 
-        
-        // ** FIX: Set Receiver state to Active so Pause button works immediately **
-        transferState = 'active'; 
-        
-        dc.send(JSON.stringify({ type: 'file-accept' })); 
-        pendingFileReq = null; 
-    }
+    getEl('file-input').addEventListener('change', handleFileSelect);
+    getEl('folder-input').addEventListener('change', handleFileSelect);
 
-    async function startTransfer() {
-        if(!activeTransfer) return;
-        renderProgressMsg(activeTransfer.file.name, activeTransfer.id, 'me');
-        const buf = await activeTransfer.file.arrayBuffer();
-        activeTransfer.buffer = buf;
-        transferLoop();
-    }
-
-    function transferLoop() {
-        if (!dc || dc.readyState !== 'open' || !activeTransfer || activeTransfer.paused) return;
-        
-        const buf = activeTransfer.buffer;
-        while(activeTransfer.offset < buf.byteLength) {
-            if(activeTransfer.paused) return; 
-            if(dc.bufferedAmount > 1024 * 1024) { setTimeout(transferLoop, 10); return; }
-            
-            const chunk = buf.slice(activeTransfer.offset, activeTransfer.offset + CHUNK_SIZE);
-            dc.send(chunk);
-            activeTransfer.offset += CHUNK_SIZE;
-            
-            const pct = Math.floor((activeTransfer.offset / buf.byteLength) * 100);
-            updateProgressBar(activeTransfer.id, pct, activeTransfer.offset, buf.byteLength);
-        }
-        
-        // Done
-        log("File Sent Successfully", 'SUCCESS');
-        activeTransfer = null;
-        fileQueue.shift(); 
-        vibe(100);
-        processQueue(); 
-    }
-
+    // --- CALLS & SCREEN SHARE ---
     async function startCall() {
         try {
             callStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            getEl('local-video').srcObject = callStream; getEl('call-overlay').classList.add('visible');
-            callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
-            const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-            dc.send(JSON.stringify({ type: 'call-offer', sdp: offer }));
-        } catch(e) { alert("Call failed: " + e); }
+        } catch(err) {
+            console.warn("Video failed, trying audio only", err);
+            try {
+                callStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                showToast("Camera failed. Switching to Voice Call.");
+                if(pc.addTransceiver) pc.addTransceiver('video', { direction: 'recvonly' });
+            } catch(e) { showToast("Call failed: No Microphone found."); return; }
+        }
+        getEl('local-video').srcObject = callStream; 
+        getEl('call-overlay').classList.add('visible');
+        setupZoom();
+        callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
+        const offer = await pc.createOffer(); 
+        await pc.setLocalDescription(offer);
+        dc.send(JSON.stringify({ type: 'call-offer', sdp: offer }));
+    }    
+
+    async function startScreenShare() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            showToast("Screen Sharing is NOT supported on this device/browser."); return;
+        }
+        if (!pc || pc.connectionState !== 'connected') { showToast("You must be in a call to share screen."); return; }
+        
+        try {
+            // Assign to GLOBAL variable
+            screenShareStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            
+            const screenTrack = screenShareStream.getVideoTracks()[0];
+            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            
+            if (videoSender) {
+                await videoSender.replaceTrack(screenTrack);
+            } else {
+                pc.addTrack(screenTrack, screenShareStream);
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                dc.send(JSON.stringify({ type: 'call-offer', sdp: offer }));
+            }
+            
+            getEl('local-video').srcObject = screenShareStream;
+            
+            // Cleanup when user clicks "Stop Sharing" browser UI
+            screenTrack.onended = () => {
+                screenShareStream = null; // Clear global
+                const camTrack = callStream && callStream.getVideoTracks().length ? callStream.getVideoTracks()[0] : null;
+                const currentSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (currentSender) {
+                    if (camTrack && camTrack.readyState === 'live') { 
+                        currentSender.replaceTrack(camTrack); 
+                        getEl('local-video').srcObject = callStream; 
+                    } else { 
+                        currentSender.replaceTrack(null); 
+                        getEl('local-video').srcObject = null; 
+                    }
+                }
+            };
+        } catch(e) { 
+            console.error(e);
+            showToast("Screen Share failed or denied."); 
+        }
     }
     async function handleCallOffer(offerSDP) {
-        if(confirm("Incoming Video Call. Accept?")) {
+        const isRenegotiation = pc.signalingState !== 'stable' || (getEl('call-overlay').classList.contains('visible'));
+        if (isRenegotiation) {
+            await pc.setRemoteDescription(new RTCSessionDescription(offerSDP));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            dc.send(JSON.stringify({ type: 'call-answer', sdp: answer }));
+            return; 
+        }
+        if(confirm("Incoming Call. Accept?")) {
             getEl('call-overlay').classList.add('visible');
+            setupZoom();
             try {
                 callStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                getEl('local-video').srcObject = callStream;
-                callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
-                await pc.setRemoteDescription(new RTCSessionDescription(offerSDP));
-                const answer = await pc.createAnswer(); await pc.setLocalDescription(answer);
-                dc.send(JSON.stringify({ type: 'call-answer', sdp: answer }));
-            } catch(e) {}
+            } catch(err) {
+                try { callStream = await navigator.mediaDevices.getUserMedia({ audio: true }); } 
+                catch(e) { dc.send(JSON.stringify({ type: 'call-reject' })); return; }
+            }
+            getEl('local-video').srcObject = callStream;
+            callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
+            await pc.setRemoteDescription(new RTCSessionDescription(offerSDP));
+            const answer = await pc.createAnswer(); 
+            await pc.setLocalDescription(answer);
+            dc.send(JSON.stringify({ type: 'call-answer', sdp: answer }));
         } else { dc.send(JSON.stringify({ type: 'call-reject' })); }
     }
+
     async function handleCallAnswer(answerSDP) { await pc.setRemoteDescription(new RTCSessionDescription(answerSDP)); }
     function toggleMute() { if(callStream) { const audioTrack = callStream.getAudioTracks()[0]; if(audioTrack) { audioTrack.enabled = !audioTrack.enabled; getEl('local-video').style.opacity = audioTrack.enabled ? "1" : "0.5"; } } }
-    function endCall(notifyPeer = true) { if(callStream) { callStream.getTracks().forEach(t => { t.stop(); }); callStream = null; } getEl('call-overlay').classList.remove('visible'); if(notifyPeer && dc) dc.send(JSON.stringify({ type: 'call-end' })); }
+
+    function endCall(notifyPeer = true) { 
+        if(callStream) { 
+            callStream.getTracks().forEach(t => { t.stop(); }); 
+            callStream = null; 
+        } 
+        if(screenShareStream) {
+            screenShareStream.getTracks().forEach(t => t.stop());
+            screenShareStream = null;
+        }
+        getEl('call-overlay').classList.remove('visible'); 
+        if(notifyPeer && dc) dc.send(JSON.stringify({ type: 'call-end' })); 
+    }
 
     function getMimeType(filename) { const ext = filename.split('.').pop().toLowerCase(); if(['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image/' + ext; if(['mp4','webm','ogg'].includes(ext)) return 'video/' + ext; if(['mp3','wav'].includes(ext)) return 'audio/' + ext; if(ext === 'pdf') return 'application/pdf'; return 'application/octet-stream'; }
     function sendText() { const i = getEl('msg-input'); if(i.value.trim() && dc) { dc.send(JSON.stringify({ type: 'chat', text: i.value.trim() })); renderMsg(i.value.trim(), 'me'); i.value=""; } }
     getEl('msg-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendText(); });
 
-    function renderMsg(txt, type) { const h = getEl('chat-history'); const row = document.createElement('div'); row.className = `msg-row ${type}`; const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; bubble.innerText = txt; const time = document.createElement('div'); time.className = 'msg-time'; time.innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); row.appendChild(bubble); row.appendChild(time); h.appendChild(row); h.scrollTop = h.scrollHeight; }
+    function renderMsg(txt, type) { 
+        const h = getEl('chat-history'); 
+        const row = document.createElement('div'); 
+        row.className = `msg-row ${type}`; 
+        
+        const bubble = document.createElement('div'); 
+        bubble.className = 'msg-bubble'; 
+        bubble.innerText = txt; // Set text first
+
+        // --- NEW: Add Copy Button ---
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'msg-copy-btn';
+        copyBtn.innerText = '📋';
+        copyBtn.title = "Copy Message";
+        copyBtn.onclick = () => {
+            navigator.clipboard.writeText(txt).then(() => {
+                showToast("Message Copied!");
+                vibe(50); // Haptic feedback
+            }).catch(err => {
+                showToast("Copy failed");
+            });
+        };
+        bubble.appendChild(copyBtn);
+        // ----------------------------
+
+        const time = document.createElement('div'); 
+        time.className = 'msg-time'; 
+        time.innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); 
+        
+        row.appendChild(bubble); 
+        row.appendChild(time); 
+        h.appendChild(row); 
+        h.scrollTop = h.scrollHeight; 
+    }
+
     function addSysMsg(txt) { const h = getEl('chat-history'); const d = document.createElement('div'); d.className = 'sys-msg'; d.innerText = txt; h.appendChild(d); h.scrollTop = h.scrollHeight; }
     
-    function renderProgressMsg(filename, id, type) { 
-        const h = getEl('chat-history'); const row = document.createElement('div'); row.className = `msg-row ${type}`; 
-        const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; bubble.style.width = "220px"; 
+    function handleGraphHover(e, id) {
+        const container = e.currentTarget;
+        const rect = container.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const width = rect.width;
+        const history = container._speedHistory || [];
+        if (history.length === 0) return;
+        const index = Math.min(Math.floor((x / width) * (history.length - 1)), history.length - 1);
+        const speedVal = history[Math.max(0, index)];
+
+        const cursor = document.getElementById(`cursor-${id}`);
+        cursor.style.left = `${(index / (history.length - 1)) * 100}%`;
+        cursor.style.display = 'block';
+
+        const tip = document.getElementById(`tooltip-${id}`);
+        tip.innerText = `${(speedVal / (1024*1024)).toFixed(1)} MB/s`;
+        tip.style.display = 'block';
+        if (x > width - 70) { tip.style.left = 'auto'; tip.style.right = '5px'; } else { tip.style.left = '5px'; tip.style.right = 'auto'; }
+    }
+
+    function hideGraphHover(id) {
+        document.getElementById(`cursor-${id}`).style.display = 'none';
+        document.getElementById(`tooltip-${id}`).style.display = 'none';
+    }
+
+    function renderProgressMsg(filename, rawId, type) { 
+        const id = sanitizeId(rawId); 
+        const h = getEl('chat-history'); 
+        const row = document.createElement('div'); row.className = `msg-row ${type}`; 
         
-        // Material Controls
-        const controls = `
-            <div id="ctrl-box-${id}" class="file-controls">
-                <button id="btn-toggle-${id}" class="ctrl-btn" onclick="toggleTransfer(${id})">⏸</button>
-                <button class="ctrl-btn btn-cancel" onclick="cancelTransfer(${id})">❌</button>
+        const bubble = document.createElement('div'); 
+        bubble.className = 'msg-bubble'; 
+        bubble.style.width = "320px"; 
+        
+        const telemetry = `
+            <div class="telemetry-grid">
+                <div class="tele-box"><span class="tele-label">Speed</span><span id="stat-spd-cur-${id}" class="tele-val">0.0 MB/s</span></div>
+                <div class="tele-box"><span class="tele-label">Avg</span><span id="stat-spd-avg-${id}" class="tele-val">0.0 MB/s</span></div>
+                <div class="tele-box"><span class="tele-label">Elapsed</span><span id="stat-time-elap-${id}" class="tele-val">0:00</span></div>
+                <div class="tele-box"><span class="tele-label">ETA</span><span id="stat-time-eta-${id}" class="tele-val">--:--</span></div>
+            </div>`;
+            
+        const graph = `
+            <div id="graph-cont-${id}" class="graph-container" onmousemove="handleGraphHover(event, '${id}')" onmouseleave="hideGraphHover('${id}')">
+                <svg class="tele-graph" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <path id="graph-path-${id}" class="graph-path" d="M0 100 L100 100" />
+                </svg>
+                <div id="cursor-${id}" class="graph-cursor"></div>
+                <div id="tooltip-${id}" class="graph-tooltip">0 MB/s</div>
             </div>`;
 
-        bubble.innerHTML = `<div style="font-weight:bold; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis;">${type==='me'?'Sending':'Receiving'} ${filename}</div><div class="file-progress-container"><div id="prog-bar-${id}" class="file-progress-bar"></div></div><div id="prog-text-${id}" class="file-stat-text"><span>0%</span><span>0 MB</span></div>${controls}`; 
+        const controls = `
+            <div id="ctrl-box-${id}" class="file-controls">
+                <button id="btn-toggle-${id}" class="ctrl-btn" onclick="toggleTransfer(${rawId})">⏸</button>
+                <button class="ctrl-btn btn-cancel" onclick="cancelTransfer(${rawId})">❌</button>
+            </div>`;
+
+        bubble.innerHTML = `
+            <div style="font-weight:bold; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis;">${type==='me'?'Sending':'Receiving'} ${filename}</div>
+            <div class="file-progress-container"><div id="prog-bar-${id}" class="file-progress-bar"></div></div>
+            ${telemetry}
+            ${graph}
+            ${controls}`; 
+        
         row.appendChild(bubble); h.appendChild(row); h.scrollTop = h.scrollHeight; 
     }
+
+    function updateProgressBar(rawId, pct, currentBytes, totalBytes) { 
+        const id = sanitizeId(rawId); 
+        let now = Date.now();
+        
+        if (!activeTransfer || !activeTransfer.byteHistory) return;
     
-    function updateTransferControls(id, state) {
-        transferState = state;
+        // 1. FREEZE TIME ON COMPLETION
+        // If finished, we must use the exact finish time, otherwise 
+        // the speed calculation will degrade as "now" keeps ticking.
+        if (pct >= 100) {
+            if (!activeTransfer.endTime) activeTransfer.endTime = now;
+            now = activeTransfer.endTime;
+        }
+    
+        // 2. UPDATE HISTORY (Standard Logic)
+        activeTransfer.byteHistory.push({ t: now, b: currentBytes });
+        const windowTime = 2000;
+        while(activeTransfer.byteHistory.length > 0 && (now - activeTransfer.byteHistory[0].t) > windowTime) {
+            activeTransfer.byteHistory.shift();
+        }
+    
+        // 3. CALCULATE SPEED
+        let displaySpeed = 0;
+        const totalElapsed = (now - activeTransfer.startTime) / 1000;
+    
+        if (pct >= 100) {
+            // FINAL STATS: Total Size / Total Frozen Time
+            // Ensure we don't divide by zero if it was instant (0ms)
+            const safeElapsed = totalElapsed > 0.001 ? totalElapsed : 0.001;
+            displaySpeed = totalBytes / safeElapsed;
+            
+            // Fill graph for instant visual feedback
+            if (activeTransfer.graphHistory.every(v => v === 0)) {
+                activeTransfer.graphHistory.fill(displaySpeed);
+            }
+        } else {
+            // ACTIVE STATS: Sliding Window
+            if (activeTransfer.byteHistory.length >= 2) {
+                const first = activeTransfer.byteHistory[0];
+                const last = activeTransfer.byteHistory[activeTransfer.byteHistory.length - 1];
+                const timeDiff = (last.t - first.t) / 1000;
+                const byteDiff = last.b - first.b;
+                if (timeDiff > 0) displaySpeed = byteDiff / timeDiff;
+            }
+        }
+    
+        // 4. DRAW GRAPH
+        const graphHistory = activeTransfer.graphHistory;
+        graphHistory.shift();
+        graphHistory.push(displaySpeed);
+    
+        const pathEl = document.getElementById(`graph-path-${id}`);
+        if (pathEl) {
+            let localMax = 0;
+            graphHistory.forEach(s => { if(s > localMax) localMax = s; });
+            const graphMax = Math.max(localMax * 1.1, 1024 * 1024); 
+    
+            const len = graphHistory.length;
+            const stepX = 100 / (len - 1);
+    
+            let d = `M0 100 `; 
+            for(let i=0; i<len; i++) {
+                const val = graphHistory[i];
+                const x = (i * stepX).toFixed(1);
+                const y = (100 - ((val / graphMax) * 100)).toFixed(1);
+                d += `L${x} ${y} `;
+            }
+            d += `L100 100 Z`; 
+            pathEl.setAttribute('d', d);
+        }
+    
+        // 5. UPDATE TEXT & BAR
+        const bar = document.getElementById(`prog-bar-${id}`); 
+        if(bar) bar.style.width = Math.min(100, pct) + "%"; 
+    
+        const elCur = document.getElementById(`stat-spd-cur-${id}`);
+        if (elCur) {
+            const toMB = (b) => (b / (1024*1024)).toFixed(1);
+            elCur.innerText = `${toMB(displaySpeed)} MB/s`;
+    
+            // --- NEW TIME FORMATTER ---
+            const fmtTime = (s) => {
+                if (!isFinite(s) || s < 0) return "--:--";
+                if (s < 1.0) return (s * 1000).toFixed(0) + "ms"; // e.g. "850ms"
+                if (s < 60) return s.toFixed(1) + "s";            // e.g. "4.2s"
+                
+                const m = Math.floor(s / 60);
+                const sec = Math.floor(s % 60);
+                return `${m}:${sec.toString().padStart(2, '0')}`; // e.g. "1:05"
+            };
+    
+            // ETA Calc
+            let etaSeconds = 0;
+            if (pct < 100) {
+                const remainingBytes = totalBytes - currentBytes;
+                etaSeconds = displaySpeed > 0 ? remainingBytes / displaySpeed : 0;
+            }
+    
+            const elAvg = document.getElementById(`stat-spd-avg-${id}`);
+            // Calculate average based on frozen time if finished
+            const avgSpeed = totalElapsed > 0 ? currentBytes / totalElapsed : 0;
+            if(elAvg) elAvg.innerText = `${toMB(avgSpeed)} MB/s`;
+            
+            const elEta = document.getElementById(`stat-time-eta-${id}`);
+            if(elEta) elEta.innerText = pct >= 100 ? "Done" : fmtTime(etaSeconds);
+            
+            const elElap = document.getElementById(`stat-time-elap-${id}`);
+            if(elElap) elElap.innerText = fmtTime(totalElapsed);
+        }
+    
+        if(pct >= 100) updateTransferControls(rawId, 'finished');
+    }
+ 
+    function updateTransferControls(rawId, state) {
+        const id = sanitizeId(rawId);
+        if(activeTransfer && activeTransfer.id === rawId) transferState = state;
+
         const box = getEl(`ctrl-box-${id}`);
         const btnToggle = getEl(`btn-toggle-${id}`);
         const bar = getEl(`prog-bar-${id}`);
-        const txt = getEl(`prog-text-${id}`);
         
-        if(!box || !btnToggle) return;
+        if(!box) return;
 
         if (state === 'active') {
-            btnToggle.innerText = "⏸"; 
-            bar.classList.remove('paused', 'cancelled');
+            if(btnToggle) btnToggle.innerText = "⏸"; 
+            if(bar) bar.classList.remove('paused', 'cancelled');
         } else if (state === 'paused') {
-            btnToggle.innerText = "▶"; 
-            bar.classList.add('paused');
+            if(btnToggle) btnToggle.innerText = "▶"; 
+            if(bar) bar.classList.add('paused');
         } else if (state === 'cancelled') {
             box.style.display = 'none'; 
-            bar.classList.add('cancelled'); bar.style.width = "100%";
-            if(txt) txt.innerText = "Cancelled";
+            if(bar) { bar.classList.add('cancelled'); bar.style.width = "100%"; }
         } else if (state === 'finished') {
-            box.style.display = 'none'; 
+            box.remove(); 
         }
     }
 
-    function updateProgressBar(id, pct, currentBytes, totalBytes) { 
-        const bar = document.getElementById(`prog-bar-${id}`); const txt = document.getElementById(`prog-text-${id}`); 
-        if(bar && txt && pct !== null) { 
-            pct = Math.min(100, pct); bar.style.width = pct + "%"; 
-            const mb = (currentBytes / (1024*1024)).toFixed(1); const total = (totalBytes / (1024*1024)).toFixed(1); 
-            txt.innerHTML = `<span>${pct}%</span><span>${mb}/${total} MB</span>`; 
-            if(pct >= 100) updateTransferControls(id, 'finished');
-        } 
-    }
-    
-    async function renderDownload(url, name, type) { 
-        const h = getEl('chat-history'); const row = document.createElement('div'); row.className = 'msg-row peer'; const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; 
+    async function renderDownload(url, name, type, isOPFS = false) { 
+        const h = getEl('chat-history'); 
+        const row = document.createElement('div'); row.className = 'msg-row peer'; 
+        const bubble = document.createElement('div'); bubble.className = 'msg-bubble'; 
         
         if(type.startsWith('image/')) { const img = document.createElement('img'); img.src = url; img.className = 'img-preview'; bubble.appendChild(img); }
         else if(type.startsWith('video/')) { const v = document.createElement('video'); v.src = url; v.controls = true; v.className = 'media-preview'; bubble.appendChild(v); }
         else if(type.startsWith('audio/')) { const a = document.createElement('audio'); a.src = url; a.controls = true; a.className = 'media-preview'; bubble.appendChild(a); }
         
-        // SAVE BUTTON (File System API)
         let saveBtn = '';
-        if(window.showSaveFilePicker) {
+        if(!isOPFS && window.showSaveFilePicker) {
             saveBtn = `<button class="btn-sm btn-sec" style="margin-top:8px; width:100%" onclick="saveFileToDisk('${url}', '${name}')">💾 Save As...</button>`;
         }
-
+        const label = isOPFS ? "💾 Save to Device" : "📄 Download";
         const link = document.createElement('div');
-        link.innerHTML = `<a href="${url}" download="${name}" style="color:#4ade80; display:block; margin-top:8px;">📄 Download ${name}</a>${saveBtn}`;
+        link.innerHTML = `<a href="${url}" download="${name}" class="download-link" style="color:#4ade80; display:block; margin-top:8px; font-weight:bold; text-decoration:none; border:1px solid #4ade80; padding:8px; border-radius:6px; text-align:center;">${label} ${name}</a>${saveBtn}`;
         
         bubble.appendChild(link); 
-        row.appendChild(bubble); h.appendChild(row); h.scrollTop = h.scrollHeight; 
+        row.appendChild(bubble); 
+        h.appendChild(row); 
+        h.scrollTop = h.scrollHeight; 
     }
 
     async function saveFileToDisk(url, name) {
@@ -1069,11 +2586,34 @@
             const writable = await handle.createWritable();
             const response = await fetch(url);
             await response.body.pipeTo(writable);
-            addSysMsg("File Saved Successfully!");
+            showToast("File Saved Successfully!");
         } catch(e) { log("Save Failed: " + e, 'ERR'); }
     }
 
     function downloadTranscript() { const h = getEl('chat-history'); let txt = "CHAT TRANSCRIPT\n\n"; h.querySelectorAll('.msg-row').forEach(row => { const sender = row.classList.contains('me') ? "ME" : "PEER"; const bubble = row.querySelector('.msg-bubble'); const text = bubble.innerText.replace(/\n/g, ' '); const time = row.querySelector('.msg-time') ? row.querySelector('.msg-time').innerText : ""; txt += `[${time}] ${sender}: ${text}\n`; }); const blob = new Blob([txt], {type:'text/plain'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `chat-${Date.now()}.txt`; a.click(); toggleMenu(); }
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // User has returned to the tab (e.g. closed file picker)
+            // If we are disconnected, try to kickstart the connection
+            if (pc && pc.iceConnectionState === 'disconnected') {
+                reviveConnection();
+            }
+        }
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+            // User returned. Attempt to revive if possible.
+            if (pc && pc.iceConnectionState === 'disconnected') {
+                reviveConnection();
+            }
+            
+            // Reset the selection flag after a short delay
+            // (So the disconnect handler can 'see' it was true)
+            setTimeout(() => { isSelectingFile = false; }, 1000);
+        }
+    });
 
     window.addEventListener('load', initApp);
 </script>
