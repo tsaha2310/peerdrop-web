@@ -286,6 +286,45 @@
         /* CALL OVERLAY */
         #call-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000; z-index: 2000; display: none; flex-direction: column; }
         #call-overlay.visible { display: flex; }
+
+        #call-overlay.pip-mode {
+            top: auto; left: auto; bottom: 90px; right: 15px;
+            width: 110px; height: 160px;
+            border-radius: 12px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.6);
+            border: 1px solid #475569;
+            cursor: pointer;
+            background: #1e293b;
+            z-index: 2000;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        /* Adjust Video in PiP */
+        #call-overlay.pip-mode #remote-video {
+            object-fit: cover; /* Fill the small box */
+            border-radius: 11px;
+            opacity: 0.9;
+            pointer-events: none; /* Pass clicks to container */
+        }
+        
+        /* Hide clutter in PiP */
+        #call-overlay.pip-mode #local-video,
+        #call-overlay.pip-mode #call-controls {
+            display: none !important;
+        }
+        
+        /* Unread Badge for Chat Button */
+        .btn-badge::after {
+            content: "";
+            position: absolute; top: 5px; right: 5px;
+            width: 10px; height: 10px;
+            background: #ef4444;
+            border-radius: 50%;
+            border: 2px solid #1e293b;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse { 0% { transform: scale(0.95); } 70% { transform: scale(1.3); opacity: 0; } 100% { transform: scale(0.95); opacity: 0; } }
+
         /* Update this rule in your <style> block */
         #remote-video { 
             flex: 1; 
@@ -300,11 +339,66 @@
             transition: transform 0.1s linear; /* Smoothness */
         }
         #local-video { position: absolute; bottom: 100px; right: 20px; width: 100px; height: 150px; background: #333; border: 2px solid white; border-radius: 8px; object-fit: cover; box-shadow: 0 5px 15px rgba(0,0,0,0.5); }
-        #call-controls { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 20px; padding-bottom: env(safe-area-inset-bottom); }
+        #call-controls { 
+            position: absolute; 
+            bottom: 30px; 
+            left: 0; 
+            right: 0; 
+            display: flex; 
+            justify-content: center; 
+            gap: 12px; /* Reduced from 20px to fit 4 buttons */
+            padding-bottom: env(safe-area-inset-bottom); 
+        }
         .call-btn { width: 60px; height: 60px; border-radius: 50%; border: none; font-size: 1.5rem; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .btn-hangup { background: #ef4444; color: white; }
         .btn-mute { background: #334155; color: white; }
+
+        .btn-muted { 
+            background: #ef4444 !important; /* Red background when muted */
+            position: relative;
+        }
+        .btn-muted::after {
+            content: "OFF";
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            font-size: 0.6rem;
+            background: white;
+            color: #ef4444;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .btn-share-active {
+            background: #3b82f6 !important; /* Primary Blue */
+            color: white !important;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
+            animation: pulse-blue 2s infinite;
+        }
         
+        @keyframes pulse-blue { 
+            0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); } 
+            70% { box-shadow: 0 0 0 10px rgba(59, 130, 246, 0); } 
+            100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } 
+        }
+
+        #btn-timer {
+            background: none; border: none; font-size: 1.2rem; cursor: pointer;
+            padding: 0 8px; transition: all 0.2s; opacity: 0.2; filter: grayscale(100%);
+        }
+        #btn-timer.active { 
+            opacity: 1; 
+            filter: grayscale(0%);
+            transform: scale(1.1);
+            text-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+        }
+        .msg-expiry {
+            font-size: 0.65rem; color: #fca5a5; font-weight: bold; font-family: monospace;
+            display: inline-block; margin-left: 6px; padding: 2px 4px;
+            background: rgba(0,0,0,0.2); border-radius: 4px; vertical-align: middle;
+        }
+
         /* IP List */
         .ip-row { display: flex; align-items: center; gap: 12px; padding: 12px; background: #0f172a; border-radius: 8px; margin-bottom: 8px; cursor: pointer; border: 1px solid transparent; transition: 0.2s; }
         .ip-row:hover { border-color: var(--primary); background: #1e293b; }
@@ -335,6 +429,71 @@
                 pointer-events: none;
             }
         }
+
+        #qrcode {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+        }
+        
+        #qrcode img, 
+        #qrcode canvas {
+            /* Allow the QR to shrink, but never exceed the container width */
+            max-width: 100% !important;
+            height: auto !important; 
+            object-fit: contain;
+            
+            /* Default limit for desktops */
+            max-height: 250px; 
+        }
+        
+        /* FIX: Small Screen & Landscape Optimizations */
+        /* Triggers when screen height is small (e.g. mobile landscape or keyboard open) */
+        @media (max-height: 750px) {
+            
+            /* 1. Aggressively shrink the QR code to fit above the fold */
+            #qrcode img, 
+            #qrcode canvas {
+                max-height: 140px !important; 
+                max-width: 140px !important;
+            }
+        
+            /* 2. Reduce spacing in the main card */
+            .card {
+                padding: 10px 15px !important;
+                margin-bottom: 10px;
+            }
+        
+            /* 3. Make the title smaller and tighter */
+            h2 {
+                font-size: 1.1rem !important;
+                margin-bottom: 8px !important;
+                padding-bottom: 8px !important;
+            }
+        
+            /* 4. Compact the white QR box */
+            #qr-container {
+                padding: 8px !important;
+                margin: 5px 0 !important;
+                border-radius: 8px !important;
+            }
+        
+            /* 5. Shrink the manual text boxes */
+            .sdp-text {
+                height: 50px !important; /* Smaller text area */
+                font-size: 0.7rem !important;
+            }
+            
+            /* 6. Adjust Manual Box margins */
+            .manual-box {
+                padding: 8px !important;
+                margin-top: 8px !important;
+            }
+            
+            .manual-label {
+                margin-bottom: 2px !important;
+            }
+        }
     </style>
 </head>
 <body class="beginner-mode">
@@ -349,12 +508,14 @@
     </div>
 </div>
 
-<div id="call-overlay">
+<div id="call-overlay" onclick="maximizeCall()">
     <video id="remote-video" autoplay playsinline></video>
     <video id="local-video" autoplay playsinline muted></video>
-    <div id="call-controls">
-        <button class="call-btn btn-mute" onclick="toggleMute()">🎤</button>
-        <button class="call-btn btn-sec" onclick="startScreenShare()">🖥️</button>
+    
+    <div id="call-controls" onclick="event.stopPropagation()">
+        <button id="btn-chat-call" class="call-btn btn-sec" onclick="togglePiP()">💬</button>
+        <button id="btn-mute-toggle" class="call-btn btn-mute" onclick="toggleMute()">🎤</button>
+        <button id="btn-share" class="call-btn btn-sec" onclick="startScreenShare()">🖥️</button>
         <button class="call-btn btn-hangup" onclick="endCall()">❌</button>
     </div>
 </div>
@@ -516,6 +677,7 @@
     <div class="menu-section">Preferences</div>
     <button class="menu-item" onclick="toggleBeginnerMode()">Beginner Mode <span id="lbl-beginner" style="float:right; color:var(--success); font-weight:bold;">ON</span></button>
     
+    <button class="menu-item" onclick="showAppQR()">🔗 Share App Link</button>
     <button class="menu-item" onclick="resetOnboarding()">Replay Tutorial</button>
     <button id="btn-install" class="menu-item hidden" onclick="installPWA()">📲 Install App</button>
     
@@ -528,6 +690,21 @@
     <button class="menu-item advanced-only" onclick="cycleLogLevel()">Log Level: <span id="lbl-loglevel" style="color:var(--success)">VERBOSE</span></button>
     <div class="menu-section">Session</div>
     <button class="menu-item" onclick="location.reload()" style="color:var(--danger)">Reset App</button>
+</div>
+
+<div id="app-qr-modal" class="modal-overlay" onclick="closeAppQR()">
+    <div class="modal-card" onclick="event.stopPropagation()" style="text-align: center; align-items: center;">
+        <h3 style="margin-bottom: 10px;">Scan to Open App</h3>
+        <p style="color:#94a3b8; font-size:0.9rem; margin-top:0;">Open this URL on another device</p>
+        
+        <div id="app-qr-target" style="background: white; padding: 15px; border-radius: 12px; margin: 15px auto; display:inline-block;"></div>
+        
+        <div style="font-family: monospace; font-size: 0.75rem; color: #64748b; word-break: break-all; margin-bottom: 20px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
+            <span id="app-url-text"></span>
+        </div>
+
+        <button class="btn" onclick="closeAppQR()">Close</button>
+    </div>
 </div>
 
 <div id="net-modal" class="modal-overlay">
@@ -654,6 +831,9 @@
                 title="Send Folder">📁</button>
         </div>
 
+        <button id="btn-timer" onclick="cycleTimer()" title="Disappearing Messages">⏱️</button>
+        <div id="timer-toast" style="position:absolute; bottom:70px; left:60px; background:#1e293b; padding:5px 10px; border-radius:10px; font-size:0.8rem; display:none; border:1px solid #475569; box-shadow:0 4px 10px rgba(0,0,0,0.5);">Off</div>
+
         <input type="text" id="msg-input" placeholder="Type a message..." autocomplete="off">
         <button id="send-txt-btn" class="btn-sm" style="padding:10px 16px; border-radius:20px;" onclick="sendText()">➤</button>
     </div>
@@ -680,6 +860,9 @@
     let heartbeatInterval = null; // New Keep-Alive
     let disconnectTimer = null;
     let isSelectingFile = false;
+    let msgTimer = 0; // 0 = Off
+    const timerLevels = [0,     30000, 60000, 300000, 600000, ]; // Off, 30s, 1m, 5m, 10m
+    const timerLabels = ["Off", "30s", "1m",  "5m",  "10m"];
 
     // --- ONBOARDING LOGIC ---
     let currentSlide = 1;
@@ -801,6 +984,27 @@
 
     function updateTransform(el) {
         el.style.transform = `translate(${zoomState.pointX}px, ${zoomState.pointY}px) scale(${zoomState.scale})`;
+    }
+
+    function cycleTimer() {
+        const idx = timerLevels.indexOf(msgTimer);
+        const nextIdx = (idx + 1) % timerLevels.length;
+        msgTimer = timerLevels[nextIdx];
+        
+        const btn = getEl('btn-timer');
+        const toast = getEl('timer-toast');
+        
+        if (msgTimer > 0) {
+            btn.classList.add('active');
+            toast.style.color = 'var(--warn)';
+        } else {
+            btn.classList.remove('active');
+            toast.style.color = 'white';
+        }
+        
+        toast.innerText = `⏲️ ${timerLabels[nextIdx]}`;
+        toast.style.display = 'block';
+        setTimeout(() => toast.style.display = 'none', 1500);
     }
    
     function initApp() {
@@ -984,6 +1188,41 @@
         getEl('lbl-beginner').style.color = active ? 'var(--success)' : '#64748b';
         localStorage.setItem('beginnerMode', active);
         toggleMenu(); 
+    }
+
+    function showAppQR() {
+        toggleMenu(); // Close the menu
+        const modal = document.getElementById('app-qr-modal');
+        const container = document.getElementById('app-qr-target');
+        const urlText = document.getElementById('app-url-text');
+        
+        // Get clean URL (remove hash/session data to just share the app entry point)
+        const cleanUrl = window.location.href.split('#')[0];
+        
+        container.innerHTML = ""; // Clear previous
+        urlText.innerText = cleanUrl;
+        
+        // Generate QR
+        new QRCode(container, { 
+            text: cleanUrl, 
+            width: 200, 
+            height: 200, 
+            correctLevel: QRCode.CorrectLevel.L 
+        });
+        
+        modal.classList.add('visible');
+    }
+    
+    function closeAppQR() {
+        document.getElementById('app-qr-modal').classList.remove('visible');
+    }
+    
+    function toggleSendFileMode() {
+        document.body.classList.toggle('files-only');
+        const active = document.body.classList.contains('files-only');
+        getEl('lbl-filemode').innerText = active ? 'ON' : 'OFF';
+        getEl('lbl-filemode').style.color = active ? 'var(--success)' : '#64748b';
+        toggleMenu();
     }
     
     async function toggleWakeLock(active) {
@@ -1181,6 +1420,8 @@
 
     async function initHost() {
         isHost = true;
+        getEl('host-sdp-in').value = "";
+        getEl('guest-sdp-in').value = "";
         getEl('role-select').classList.add('hidden');
         showLoading("Initializing Host...", "Allow Permissions if prompted");
         await acquireMediaForIPs();
@@ -1195,6 +1436,8 @@
 
      async function initReceiver(prefilledData = null) {
         isHost = false;
+        getEl('host-sdp-in').value = "";
+        getEl('guest-sdp-in').value = "";
         getEl('role-select').classList.add('hidden');
         
         if (!prefilledData) {
@@ -1338,6 +1581,10 @@
         
         // 1. UI Cleanup
         if(getEl('main-menu').classList.contains('visible')) toggleMenu();
+
+        getEl('host-sdp-in').value = "";
+        getEl('guest-sdp-in').value = "";
+        getEl('manual-share-text').value = "";
         
         getEl('room-panel').classList.add('hidden');
         getEl('setup-panel').classList.remove('hidden');
@@ -1846,10 +2093,24 @@
             try {
                 const msg = JSON.parse(data);
                 if (msg.type === 'ping') { return; } // Ignore Heartbeats
-                else if (msg.type === 'chat') { renderMsg(msg.text, 'peer'); vibe(100); } 
+                else if (msg.type === 'chat') { 
+                    renderMsg(msg.text, 'peer', msg.timer); 
+                    vibe(100);
+                    const overlay = getEl('call-overlay');
+                    if (overlay.classList.contains('visible') && !overlay.classList.contains('pip-mode')) {
+                         getEl('btn-chat-call').classList.add('btn-badge');
+                         showToast(`💬 New Message from Peer`);
+                    }
+                } 
                 else if (msg.type === 'batch-offer') {
                     pendingBatch = msg.manifest;
                     showBatchModal();
+                    const overlay = getEl('call-overlay');
+                    if (overlay.classList.contains('visible') && !overlay.classList.contains('pip-mode')) {
+                         getEl('btn-chat-call').classList.add('btn-badge');
+                         showToast(`📁 Incoming Offer: ${msg.manifest.length} Files`);
+                         vibe(100); // Haptic feedback
+                    }
                 }
                 else if (msg.type === 'batch-response') {
                     const allowedIds = msg.acceptedIds;
@@ -1903,6 +2164,23 @@
                         updateTransferControls(msg.id, 'active');
                         transferLoop();
                         addSysMsg("Resuming Transfer...");
+                    }
+                }
+                else if (msg.type === 'stream-update') {
+                    const v = document.getElementById('remote-video');
+                    if (msg.hasVideo) {
+                        // OPTION A: Reverting to Camera
+                        // We momentarily toggle srcObject to force the video element 
+                        // to flush the buffer and pick up the new track immediately.
+                        const stream = v.srcObject;
+                        v.srcObject = null; 
+                        v.srcObject = stream;
+                        v.style.opacity = "1";
+                        v.play().catch(e => {}); 
+                    } else {
+                        // OPTION B: Reverting to Audio-Only
+                        // Hide the video element to prevent showing the last frozen frame
+                        v.style.opacity = "0"; 
                     }
                 }
                 
@@ -2208,6 +2486,7 @@
         }
         getEl('local-video').srcObject = callStream; 
         getEl('call-overlay').classList.add('visible');
+        resetCallPip();
         setupZoom();
         callStream.getTracks().forEach(track => pc.addTrack(track, callStream));
         const offer = await pc.createOffer(); 
@@ -2215,16 +2494,52 @@
         dc.send(JSON.stringify({ type: 'call-offer', sdp: offer }));
     }    
 
-    async function startScreenShare() {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-            showToast("Screen Sharing is NOT supported on this device/browser."); return;
+    function resetCallPip() {
+        getEl('call-overlay').classList.remove('pip-mode'); // Reset PiP
+        getEl('call-overlay').classList.add('visible');
+    }
+
+    function togglePiP() {
+        const overlay = getEl('call-overlay');
+        overlay.classList.add('pip-mode');
+        
+        // Clear badge when opening chat
+        getEl('btn-chat-call').classList.remove('btn-badge');
+        
+        // Hint to user (first time only)
+        if(!sessionStorage.getItem('pipHint')) {
+            showToast("Tap video to maximize");
+            sessionStorage.setItem('pipHint', 'true');
         }
-        if (!pc || pc.connectionState !== 'connected') { showToast("You must be in a call to share screen."); return; }
+    }
+    
+    function maximizeCall() {
+        const overlay = getEl('call-overlay');
+        if (overlay.classList.contains('pip-mode')) {
+            overlay.classList.remove('pip-mode');
+        }
+    }
+
+    async function startScreenShare() {
+        // 1. Toggle Logic: If already sharing, stop it.
+        if (screenShareStream) {
+            stopScreenShare();
+            return;
+        }
+    
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+            showToast("Screen Sharing not supported."); return;
+        }
+        if (!pc || pc.connectionState !== 'connected') { showToast("Call required to share screen."); return; }
         
         try {
-            // Assign to GLOBAL variable
+            // 2. Start Sharing
             screenShareStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
             
+            // Update UI
+            const btn = document.getElementById('btn-share');
+            if(btn) btn.classList.add('btn-share-active');
+    
             const screenTrack = screenShareStream.getVideoTracks()[0];
             const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
             
@@ -2232,33 +2547,65 @@
                 await videoSender.replaceTrack(screenTrack);
             } else {
                 pc.addTrack(screenTrack, screenShareStream);
+                // Renegotiate if adding a new track for the first time
                 const offer = await pc.createOffer();
                 await pc.setLocalDescription(offer);
                 dc.send(JSON.stringify({ type: 'call-offer', sdp: offer }));
             }
             
-            getEl('local-video').srcObject = screenShareStream;
+            // Show local preview
+            document.getElementById('local-video').srcObject = screenShareStream;
             
-            // Cleanup when user clicks "Stop Sharing" browser UI
+            // 3. Handle "Stop" via Browser UI (Native floating bar)
             screenTrack.onended = () => {
-                screenShareStream = null; // Clear global
-                const camTrack = callStream && callStream.getVideoTracks().length ? callStream.getVideoTracks()[0] : null;
-                const currentSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
-                if (currentSender) {
-                    if (camTrack && camTrack.readyState === 'live') { 
-                        currentSender.replaceTrack(camTrack); 
-                        getEl('local-video').srcObject = callStream; 
-                    } else { 
-                        currentSender.replaceTrack(null); 
-                        getEl('local-video').srcObject = null; 
-                    }
-                }
+                stopScreenShare();
             };
+    
         } catch(e) { 
             console.error(e);
-            showToast("Screen Share failed or denied."); 
+            // showToast("Screen Share cancelled."); // Optional: suppress cancel errors
         }
     }
+ 
+    function stopScreenShare() {
+        if (!screenShareStream) return;
+    
+        // 1. Stop the screen tracks
+        screenShareStream.getTracks().forEach(t => t.stop());
+        screenShareStream = null;
+    
+        let hasVideo = false;
+    
+        // 2. Revert to Camera (if available)
+        if (callStream) {
+            const camTrack = callStream.getVideoTracks()[0];
+            const videoSender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+            
+            if (videoSender && camTrack && camTrack.readyState === 'live') {
+                videoSender.replaceTrack(camTrack);
+                document.getElementById('local-video').srcObject = callStream;
+                hasVideo = true;
+            } else if (videoSender) {
+                 // Fallback: Audio-only call (No camera to revert to)
+                 // We replace with null to stop sending bits, preventing frozen frames
+                 videoSender.replaceTrack(null);
+                 document.getElementById('local-video').srcObject = null;
+            }
+        } else {
+            // No call stream at all (edge case)
+            document.getElementById('local-video').srcObject = null;
+        }
+    
+        // 3. Reset UI Button
+        const btn = document.getElementById('btn-share');
+        if(btn) btn.classList.remove('btn-share-active');
+    
+        // 4. SIGNAL THE PEER to refresh their view
+        if (dc && dc.readyState === 'open') {
+            dc.send(JSON.stringify({ type: 'stream-update', hasVideo: hasVideo }));
+        }
+    }   
+
     async function handleCallOffer(offerSDP) {
         const isRenegotiation = pc.signalingState !== 'stable' || (getEl('call-overlay').classList.contains('visible'));
         if (isRenegotiation) {
@@ -2270,6 +2617,7 @@
         }
         if(confirm("Incoming Call. Accept?")) {
             getEl('call-overlay').classList.add('visible');
+            resetCallPip();
             setupZoom();
             try {
                 callStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
@@ -2287,8 +2635,28 @@
     }
 
     async function handleCallAnswer(answerSDP) { await pc.setRemoteDescription(new RTCSessionDescription(answerSDP)); }
-    function toggleMute() { if(callStream) { const audioTrack = callStream.getAudioTracks()[0]; if(audioTrack) { audioTrack.enabled = !audioTrack.enabled; getEl('local-video').style.opacity = audioTrack.enabled ? "1" : "0.5"; } } }
-
+    function toggleMute() { 
+        if(callStream) { 
+            const audioTrack = callStream.getAudioTracks()[0]; 
+            if(audioTrack) { 
+                audioTrack.enabled = !audioTrack.enabled; 
+                
+                // Visual Updates
+                const btn = document.getElementById('btn-mute-toggle');
+                if (!audioTrack.enabled) {
+                    // Now Muted
+                    btn.classList.add('btn-muted');
+                    btn.innerText = "🔇";
+                    getEl('local-video').style.opacity = "0.5"; 
+                } else {
+                    // Now Unmuted
+                    btn.classList.remove('btn-muted');
+                    btn.innerText = "🎤";
+                    getEl('local-video').style.opacity = "1"; 
+                }
+            } 
+        } 
+    }
     function endCall(notifyPeer = true) { 
         if(callStream) { 
             callStream.getTracks().forEach(t => { t.stop(); }); 
@@ -2298,39 +2666,77 @@
             screenShareStream.getTracks().forEach(t => t.stop());
             screenShareStream = null;
         }
+        const muteBtn = document.getElementById('btn-mute-toggle');
+        if (muteBtn) {
+            muteBtn.classList.remove('btn-muted');
+            muteBtn.innerText = "🎤";
+        }
+        const shareBtn = document.getElementById('btn-share');
+        if(shareBtn) shareBtn.classList.remove('btn-share-active');
+        const localVid = document.getElementById('local-video');
+        if (localVid) localVid.style.opacity = "1";
         getEl('call-overlay').classList.remove('visible'); 
         if(notifyPeer && dc) dc.send(JSON.stringify({ type: 'call-end' })); 
     }
 
     function getMimeType(filename) { const ext = filename.split('.').pop().toLowerCase(); if(['jpg','jpeg','png','gif','webp'].includes(ext)) return 'image/' + ext; if(['mp4','webm','ogg'].includes(ext)) return 'video/' + ext; if(['mp3','wav'].includes(ext)) return 'audio/' + ext; if(ext === 'pdf') return 'application/pdf'; return 'application/octet-stream'; }
-    function sendText() { const i = getEl('msg-input'); if(i.value.trim() && dc) { dc.send(JSON.stringify({ type: 'chat', text: i.value.trim() })); renderMsg(i.value.trim(), 'me'); i.value=""; } }
+
+    function sendText() { 
+        const i = getEl('msg-input'); 
+        if(i.value.trim() && dc) { 
+            // Modified to include 'timer' in payload
+            const payload = { type: 'chat', text: i.value.trim(), timer: msgTimer };
+            dc.send(JSON.stringify(payload)); 
+            
+            // Pass timer to local render
+            renderMsg(i.value.trim(), 'me', msgTimer); 
+            i.value=""; 
+        } 
+    }
+
     getEl('msg-input').addEventListener('keypress', (e) => { if(e.key === 'Enter') sendText(); });
 
-    function renderMsg(txt, type) { 
+    function renderMsg(txt, type, timer = 0) { 
         const h = getEl('chat-history'); 
         const row = document.createElement('div'); 
         row.className = `msg-row ${type}`; 
         
         const bubble = document.createElement('div'); 
         bubble.className = 'msg-bubble'; 
-        bubble.innerText = txt; // Set text first
-
-        // --- NEW: Add Copy Button ---
+        bubble.innerText = txt; 
+    
+        // --- Copy Button Logic (Existing) ---
         const copyBtn = document.createElement('button');
         copyBtn.className = 'msg-copy-btn';
         copyBtn.innerText = '📋';
-        copyBtn.title = "Copy Message";
-        copyBtn.onclick = () => {
-            navigator.clipboard.writeText(txt).then(() => {
-                showToast("Message Copied!");
-                vibe(50); // Haptic feedback
-            }).catch(err => {
-                showToast("Copy failed");
-            });
-        };
+        copyBtn.onclick = () => { navigator.clipboard.writeText(txt).then(() => { showToast("Message Copied!"); vibe(50); }); };
         bubble.appendChild(copyBtn);
-        // ----------------------------
-
+    
+        // --- NEW: Disappearing Timer Logic ---
+        if (timer > 0) {
+            const expirySpan = document.createElement('span');
+            expirySpan.className = 'msg-expiry';
+            bubble.appendChild(expirySpan);
+    
+            let remaining = timer;
+            const interval = setInterval(() => {
+                remaining -= 1000;
+                if (remaining <= 0) {
+                    clearInterval(interval);
+                    row.style.opacity = '0';
+                    setTimeout(() => row.remove(), 500); // Fade out then remove
+                } else {
+                    // Format nicely (e.g., 50s or 1m 20s)
+                    const sec = Math.ceil(remaining / 1000);
+                    expirySpan.innerText = `⏳ ${sec}s`;
+                }
+            }, 1000);
+            
+            // Initialize text immediately
+            expirySpan.innerText = `⏳ ${Math.ceil(remaining/1000)}s`;
+        }
+        // -------------------------------------
+    
         const time = document.createElement('div'); 
         time.className = 'msg-time'; 
         time.innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); 
